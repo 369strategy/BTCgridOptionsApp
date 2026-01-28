@@ -1951,6 +1951,15 @@
                 isRealBet: typeof isRealMode !== 'undefined' && isRealMode  // Track if this was a real money bet
             };
             
+            // Save to database if real mode
+            if (typeof isRealMode !== 'undefined' && isRealMode) {
+                saveBetToDatabase(key, lockedBoxes[key]).then(betId => {
+                    if (betId) {
+                        lockedBoxes[key].dbBetId = betId;
+                    }
+                });
+            }
+            
             const modeTag = (typeof isRealMode !== 'undefined' && isRealMode) ? '[REAL]' : '[DEMO]';
             console.log(modeTag, 'Bet placed:', key, 'Amount: $' + betSize, 'Multiplier:', adjustedMult.toFixed(2) + 'x');
             return true;
@@ -3157,6 +3166,11 @@
                         box.payout = payout;
                         updateBalanceDisplay();
                         
+                        // Save win to database if real bet
+                        if (box.isRealBet) {
+                            resolveBetInDatabase(key, true, true);
+                        }
+                        
                         playCashRegisterSound(); // Cha-ching!
                         console.log('WIN!', key, 'Bet: $' + box.betAmount, 'Payout: $' + payout.toFixed(2));
                     }
@@ -3184,6 +3198,12 @@
                         pendingBets -= box.betAmount;
                         totalLosses++;
                         updateBalanceDisplay();
+                        
+                        // Save loss to database if real bet
+                        if (box.isRealBet) {
+                            resolveBetInDatabase(key, false, false);
+                        }
+                        
                         playLossSound();
                         console.log('LOSS (expiry)!', key, 'Lost: $' + box.betAmount);
                     }
@@ -3558,14 +3578,62 @@
             if (!currentAddress) return;
             
             try {
-                // Get confirmed deposits
+                // Use game-actions API to get full game state
+                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + SUPABASE_KEY
+                    },
+                    body: JSON.stringify({
+                        action: 'get_state',
+                        wallet_address: currentAddress
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success && result.state) {
+                    realBalance = result.state.balance;
+                    realStartingBalance = result.state.starting_balance;
+                    realTotalWins = result.state.win_count || 0;
+                    realTotalLosses = result.state.loss_count || 0;
+                    realPendingBets = result.state.pending_bets || 0;
+                    
+                    if (isRealMode) {
+                        balance = realBalance;
+                        startingBalance = realStartingBalance;
+                        totalWins = realTotalWins;
+                        totalLosses = realTotalLosses;
+                        pendingBets = realPendingBets;
+                        updateBalanceDisplay();
+                    }
+                    
+                    console.log('Game state loaded:', result.state);
+                    
+                    // Also load active bets to restore locked boxes
+                    await loadActiveBets();
+                } else {
+                    console.error('Failed to load game state:', result.error);
+                    // Fallback to simple deposit-based balance
+                    await loadRealBalanceFallback();
+                }
+                
+            } catch (error) {
+                console.error('Failed to load real balance:', error);
+                await loadRealBalanceFallback();
+            }
+        }
+        
+        // Fallback balance loader (if game-actions not available)
+        async function loadRealBalanceFallback() {
+            try {
                 const depositsRes = await fetch(
                     SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
                     { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
                 );
                 const deposits = await depositsRes.json() || [];
                 
-                // Get withdrawals (not rejected)
                 const withdrawalsRes = await fetch(
                     SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
                     { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
@@ -3590,11 +3658,138 @@
                     startingBalance = realStartingBalance;
                     updateBalanceDisplay();
                 }
+            } catch (e) {
+                console.error('Fallback balance load failed:', e);
+            }
+        }
+        
+        // Load active bets from database and restore locked boxes
+        async function loadActiveBets() {
+            if (!currentAddress || !isRealMode) return;
+            
+            try {
+                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + SUPABASE_KEY
+                    },
+                    body: JSON.stringify({
+                        action: 'get_active_bets',
+                        wallet_address: currentAddress
+                    })
+                });
                 
-                console.log('Real balance loaded:', realBalance);
+                const result = await response.json();
                 
+                if (result.success && result.bets) {
+                    // Clear current locked boxes for real mode
+                    realLockedBoxes = {};
+                    
+                    // Restore each active bet as a locked box
+                    for (const bet of result.bets) {
+                        const key = bet.cell_key;
+                        realLockedBoxes[key] = {
+                            multiplier: parseFloat(bet.multiplier),
+                            cellTs: parseInt(bet.cell_timestamp),
+                            priceLevel: parseFloat(bet.price_level),
+                            touched: false,
+                            expired: false,
+                            lockedAt: new Date(bet.locked_at).getTime(),
+                            betAmount: parseFloat(bet.amount),
+                            isRealBet: true,
+                            dbBetId: bet.id  // Store database ID for resolution
+                        };
+                    }
+                    
+                    // If in real mode, update the active lockedBoxes
+                    if (isRealMode) {
+                        lockedBoxes = realLockedBoxes;
+                    }
+                    
+                    console.log('Restored', result.bets.length, 'active bets from database');
+                }
             } catch (error) {
-                console.error('Failed to load real balance:', error);
+                console.error('Failed to load active bets:', error);
+            }
+        }
+        
+        // Save bet to database when placed (real mode only)
+        async function saveBetToDatabase(key, betData) {
+            if (!currentAddress || !isRealMode) return null;
+            
+            try {
+                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + SUPABASE_KEY
+                    },
+                    body: JSON.stringify({
+                        action: 'place_bet',
+                        wallet_address: currentAddress,
+                        cell_key: key,
+                        amount: betData.betAmount,
+                        multiplier: betData.multiplier,
+                        price_level: betData.priceLevel,
+                        cell_timestamp: betData.cellTs,
+                        expires_at: new Date(betData.cellTs + 10000).toISOString()
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('[REAL] Bet saved to database:', result.bet_id);
+                    return result.bet_id;
+                } else {
+                    console.error('Failed to save bet:', result.error);
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error saving bet to database:', error);
+                return null;
+            }
+        }
+        
+        // Resolve bet in database (win/loss/expire)
+        async function resolveBetInDatabase(key, won, touched) {
+            if (!currentAddress || !isRealMode) return;
+            
+            const box = lockedBoxes[key];
+            if (!box || !box.isRealBet) return;
+            
+            try {
+                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + SUPABASE_KEY
+                    },
+                    body: JSON.stringify({
+                        action: 'resolve_bet',
+                        wallet_address: currentAddress,
+                        cell_key: key,
+                        bet_id: box.dbBetId || null,
+                        won: won,
+                        touched: touched
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('[REAL] Bet resolved in database:', key, won ? 'WON' : 'LOST', 'New balance:', result.new_balance);
+                    // Update real balance from server
+                    realBalance = result.new_balance;
+                    if (isRealMode) {
+                        balance = realBalance;
+                    }
+                } else {
+                    console.error('Failed to resolve bet:', result.error);
+                }
+            } catch (error) {
+                console.error('Error resolving bet in database:', error);
             }
         }
         
