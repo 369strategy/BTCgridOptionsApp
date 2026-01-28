@@ -1,0 +1,4249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC/USDT Perpetual Options Grid</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, #0a0a0f 0%, #0f0f18 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #2a2a3a;
+        }
+        .logo { display: flex; align-items: center; gap: 12px; }
+        .logo-icon {
+            width: 48px; height: 48px;
+            background: linear-gradient(135deg, #f7931a, #ff9500);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 20px;
+            box-shadow: 0 0 30px rgba(247, 147, 26, 0.3);
+        }
+        .logo-text h1 { font-size: 24px; font-weight: 700; }
+        .logo-text span { font-size: 12px; color: #8888aa; font-family: monospace; }
+        .header-right { display: flex; align-items: center; gap: 24px; }
+        .header-stat { text-align: center; }
+        .header-stat-label { font-size: 11px; color: #8888aa; margin-bottom: 2px; }
+        .header-stat-value { font-family: monospace; font-size: 16px; color: #ffc800; font-weight: 600; }
+        .connection-status {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 16px; background: #12121a; border-radius: 20px;
+            font-size: 13px; font-family: monospace;
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: #ff3366;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.connected { background: #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.5); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        .price-section { display: grid; grid-template-columns: 1fr auto; gap: 20px; margin-bottom: 20px; }
+        .main-price {
+            background: #12121a; border-radius: 16px; padding: 24px 32px;
+            border: 1px solid #2a2a3a; position: relative; overflow: hidden;
+        }
+        .main-price::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+        }
+        .price-label { font-size: 14px; color: #8888aa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .price-value { font-family: monospace; font-size: 48px; font-weight: 700; letter-spacing: -2px; transition: color 0.15s ease; }
+        .price-value.up { color: #00ff88; text-shadow: 0 0 30px rgba(0, 255, 136, 0.3); }
+        .price-value.down { color: #ff3366; text-shadow: 0 0 30px rgba(255, 51, 102, 0.3); }
+        .price-change { display: flex; align-items: center; gap: 16px; margin-top: 12px; }
+        .change-badge { padding: 6px 12px; border-radius: 6px; font-family: monospace; font-size: 14px; font-weight: 500; }
+        .change-badge.positive { background: rgba(0, 255, 136, 0.1); color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); }
+        .change-badge.negative { background: rgba(255, 51, 102, 0.1); color: #ff3366; border: 1px solid rgba(255, 51, 102, 0.3); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .stat-card { background: #12121a; border-radius: 10px; padding: 12px 16px; border: 1px solid #2a2a3a; }
+        .stat-label { font-size: 10px; color: #8888aa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .stat-value { font-family: monospace; font-size: 14px; font-weight: 500; }
+        .stat-value.high { color: #00ff88; }
+        .stat-value.low { color: #ff3366; }
+        .stat-value.vol { color: #00d4ff; }
+        
+        .chart-container { background: #0a0a0f; border-radius: 16px; padding: 20px; border: 1px solid #2a2a3a; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+        .chart-title { font-size: 16px; font-weight: 600; }
+        .chart-legend { display: flex; gap: 12px; font-size: 10px; color: #8888aa; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        #chart { width: 100%; height: 700px; border-radius: 8px; display: block; }
+        .footer { text-align: center; padding: 20px; color: #8888aa; font-size: 12px; }
+        
+        /* Trading Panel */
+        .trading-panel {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.08), rgba(255, 200, 0, 0.08));
+            border: 1px solid rgba(255, 200, 0, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .balance-section {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .balance-item {
+            flex: 1;
+            min-width: 100px;
+            text-align: center;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+        }
+        .balance-label {
+            font-size: 11px;
+            color: #8888aa;
+            margin-bottom: 6px;
+            letter-spacing: 1px;
+        }
+        .balance-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00d4ff;
+            font-family: monospace;
+        }
+        .balance-item.pnl .balance-value { color: #888; }
+        .balance-item.pnl .balance-value.positive { color: #00ff88; }
+        .balance-item.pnl .balance-value.negative { color: #ff4444; }
+        .balance-item.wins .balance-value { color: #00ff88; }
+        .balance-item.losses .balance-value { color: #ff4444; }
+        
+        .bet-controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        .bet-size-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .bet-label {
+            font-size: 12px;
+            color: #ffc800;
+            letter-spacing: 2px;
+        }
+        .bet-input-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .bet-btn {
+            background: rgba(255, 200, 0, 0.2);
+            border: 1px solid rgba(255, 200, 0, 0.4);
+            color: #ffc800;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .bet-btn:hover {
+            background: rgba(255, 200, 0, 0.4);
+            transform: scale(1.05);
+        }
+        .bet-input {
+            width: 120px;
+            padding: 10px 15px;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #ffc800;
+            border-radius: 8px;
+            color: #ffc800;
+            font-family: monospace;
+        }
+        .bet-input:focus {
+            outline: none;
+            box-shadow: 0 0 15px rgba(255, 200, 0, 0.4);
+        }
+        .quick-bets {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .quick-btn {
+            background: rgba(0, 212, 255, 0.15);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #00d4ff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .quick-btn:hover {
+            background: rgba(0, 212, 255, 0.3);
+            transform: scale(1.05);
+        }
+        
+        /* House Edge Slider */
+        .house-edge-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 200, 0, 0.2);
+        }
+        .house-edge-label {
+            font-size: 12px;
+            color: #ff6b6b;
+            letter-spacing: 2px;
+        }
+        .house-edge-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff6b6b;
+            font-family: monospace;
+        }
+        .house-edge-slider {
+            width: 250px;
+            height: 8px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(90deg, #00ff88 0%, #ffff00 50%, #ff4444 100%);
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+        }
+        .house-edge-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        .house-edge-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+        }
+        .house-edge-range {
+            display: flex;
+            justify-content: space-between;
+            width: 250px;
+            font-size: 10px;
+            color: #8888aa;
+        }
+        
+        /* Auto-bet controls */
+        .auto-bet-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(0, 255, 136, 0.2);
+        }
+        .auto-bet-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .auto-bet-label {
+            font-size: 12px;
+            color: #00ff88;
+            letter-spacing: 2px;
+            font-weight: bold;
+        }
+        .auto-bet-toggle {
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid #666;
+            background: rgba(100, 100, 100, 0.3);
+            color: #888;
+        }
+        .auto-bet-toggle.active {
+            background: rgba(0, 255, 136, 0.3);
+            border-color: #00ff88;
+            color: #00ff88;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+            animation: autoBetPulse 1.5s infinite;
+        }
+        @keyframes autoBetPulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 136, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(0, 255, 136, 0.7); }
+        }
+        .auto-bet-threshold-label {
+            font-size: 11px;
+            color: #8888aa;
+        }
+        .auto-bet-input-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .auto-bet-input {
+            width: 50px;
+            padding: 6px 8px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00ff88;
+            border-radius: 6px;
+            color: #00ff88;
+            font-family: monospace;
+        }
+        .auto-bet-input:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+        }
+        .auto-bet-x {
+            font-size: 14px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        .auto-bet-adj-btn {
+            background: rgba(0, 255, 136, 0.2);
+            border: 1px solid rgba(0, 255, 136, 0.4);
+            color: #00ff88;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .auto-bet-adj-btn:hover {
+            background: rgba(0, 255, 136, 0.4);
+        }
+        .auto-bet-stats {
+            font-size: 10px;
+            color: #8888aa;
+            font-family: monospace;
+        }
+        .auto-bet-stats span {
+            color: #00ff88;
+            font-weight: bold;
+        }
+        
+        /* Pattern selector styles */
+        .pattern-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 136, 0, 0.2);
+        }
+        .pattern-label {
+            font-size: 11px;
+            color: #ff8800;
+            letter-spacing: 2px;
+        }
+        .pattern-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .pattern-btn {
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid #444;
+            background: rgba(60, 60, 60, 0.3);
+            color: #888;
+            font-family: monospace;
+        }
+        .pattern-btn:hover {
+            border-color: #ff8800;
+            color: #ff8800;
+        }
+        .pattern-btn.active {
+            background: rgba(255, 136, 0, 0.3);
+            border-color: #ff8800;
+            color: #ff8800;
+            box-shadow: 0 0 10px rgba(255, 136, 0, 0.3);
+        }
+        .pattern-preview {
+            font-size: 16px;
+            line-height: 1;
+            letter-spacing: -2px;
+        }
+        
+        /* Pattern dimension sliders */
+        .pattern-dimensions {
+            display: flex;
+            gap: 20px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .dimension-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .dimension-label {
+            font-size: 10px;
+            color: #ff8800;
+            letter-spacing: 1px;
+        }
+        .dimension-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #ff8800;
+            font-family: monospace;
+            min-width: 30px;
+            text-align: center;
+        }
+        .dimension-slider {
+            width: 100px;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(90deg, rgba(255, 136, 0, 0.3), rgba(255, 136, 0, 0.8));
+            border-radius: 3px;
+            outline: none;
+            cursor: pointer;
+        }
+        .dimension-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #ff8800;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(255, 136, 0, 0.5);
+        }
+        .dimension-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #ff8800;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 8px rgba(255, 136, 0, 0.5);
+        }
+        
+        @media (max-width: 768px) {
+            .header { flex-direction: column; gap: 16px; }
+            .price-section { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(4, 1fr); }
+            .price-value { font-size: 32px; }
+            #chart { height: 500px; }
+            .balance-section { flex-direction: column; }
+            .balance-value { font-size: 20px; }
+        }
+        
+        /* ================================================
+           MODE TOGGLE (DEMO/REAL) STYLES
+           ================================================ */
+        .mode-toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 30px;
+            border: 1px solid #2a2a3a;
+        }
+        .mode-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            opacity: 0.5;
+        }
+        .mode-label.active {
+            opacity: 1;
+            text-shadow: 0 0 10px currentColor;
+        }
+        .mode-label.demo-label { color: #ffc800; }
+        .mode-label.real-label { color: #00ff88; }
+        
+        .mode-toggle {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            cursor: pointer;
+        }
+        .mode-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .mode-slider {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, #ffc800, #ff9500);
+            border-radius: 28px;
+            transition: all 0.4s;
+            box-shadow: 0 0 15px rgba(255, 200, 0, 0.3);
+        }
+        .mode-slider::before {
+            content: '🎮';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: all 0.4s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        .mode-toggle input:checked + .mode-slider {
+            background: linear-gradient(135deg, #00ff88, #00d4ff);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+        }
+        .mode-toggle input:checked + .mode-slider::before {
+            transform: translateX(24px);
+            content: '💰';
+        }
+        
+        /* Real Money Mode Indicators */
+        .real-mode-active .trading-panel {
+            border-color: rgba(0, 255, 136, 0.5);
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.1);
+        }
+        .real-mode-banner {
+            display: none;
+            background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), rgba(0, 212, 255, 0.1));
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 10px;
+            padding: 12px 20px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 13px;
+            color: #00ff88;
+            animation: realModePulse 2s infinite;
+        }
+        .real-mode-banner.show { display: block; }
+        @keyframes realModePulse {
+            0%, 100% { border-color: rgba(0, 255, 136, 0.3); }
+            50% { border-color: rgba(0, 255, 136, 0.6); }
+        }
+        
+        .balance-mode-indicator {
+            font-size: 9px;
+            padding: 2px 8px;
+            border-radius: 8px;
+            margin-left: 8px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        .balance-mode-indicator.demo {
+            background: rgba(255, 200, 0, 0.2);
+            color: #ffc800;
+        }
+        .balance-mode-indicator.real {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+        
+        /* ================================================
+           WALLET BUTTON & DEPOSIT/WITHDRAWAL MODAL STYLES
+           ================================================ */
+        .wallet-btn {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            border: none; border-radius: 25px;
+            color: #000; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: all 0.3s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .wallet-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 212, 255, 0.4);
+        }
+        .wallet-btn.connected {
+            background: linear-gradient(135deg, #1a1a2e, #2a2a4e);
+            border: 1px solid #00ff88;
+            color: #00ff88;
+        }
+        .wallet-btn .wallet-icon { font-size: 16px; }
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-container {
+            background: linear-gradient(180deg, #12121a 0%, #0a0a0f 100%);
+            border: 1px solid #2a2a3a;
+            border-radius: 20px;
+            width: 95%; max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.8);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid #2a2a3a;
+            position: sticky; top: 0;
+            background: #12121a; z-index: 1;
+        }
+        .modal-title { font-size: 18px; font-weight: 600; color: #fff; }
+        .modal-close {
+            background: none; border: none;
+            color: #8888aa; font-size: 24px;
+            cursor: pointer; padding: 5px; line-height: 1;
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: #ff4444; }
+        .modal-body { padding: 24px; }
+        
+        .wallet-section {
+            background: rgba(0, 212, 255, 0.05);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 16px; margin-bottom: 20px;
+        }
+        .wallet-status {
+            display: flex; align-items: center;
+            justify-content: space-between; gap: 12px;
+        }
+        .wallet-info { display: flex; align-items: center; gap: 10px; }
+        .wallet-info .modal-status-dot { 
+            width: 10px; height: 10px; border-radius: 50%;
+            background: #00ff88; box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+        .wallet-address { font-family: monospace; font-size: 14px; color: #00ff88; }
+        .wallet-connect-modal-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            border: none; border-radius: 8px;
+            color: #000; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: all 0.2s; width: 100%;
+        }
+        .wallet-connect-modal-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0, 212, 255, 0.3);
+        }
+        .disconnect-modal-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid #ff4444;
+            border-radius: 8px;
+            color: #ff4444; font-size: 12px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .disconnect-modal-btn:hover { background: rgba(255, 68, 68, 0.1); }
+        
+        .chain-selector {
+            display: flex; gap: 8px;
+            margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .chain-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 16px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            color: #8888aa; font-size: 12px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .chain-btn:hover { border-color: #00d4ff; color: #fff; }
+        .chain-btn.active {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            color: #00ff88;
+        }
+        .chain-btn img { width: 20px; height: 20px; border-radius: 50%; }
+        
+        .modal-tabs {
+            display: flex; gap: 0;
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 4px; margin-bottom: 20px;
+        }
+        .modal-tab {
+            flex: 1; padding: 12px;
+            background: none; border: none;
+            border-radius: 8px;
+            color: #8888aa; font-size: 14px; font-weight: 500;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .modal-tab:hover { color: #fff; }
+        .modal-tab.active {
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            color: #000;
+        }
+        
+        .modal-form-group { margin-bottom: 16px; }
+        .modal-form-group label {
+            display: block; font-size: 12px; color: #8888aa;
+            margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .modal-form-input {
+            width: 100%; padding: 14px 16px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            color: #fff; font-size: 16px; font-family: monospace;
+            transition: border-color 0.2s;
+        }
+        .modal-form-input:focus { outline: none; border-color: #00d4ff; }
+        .modal-form-input::placeholder { color: #444; }
+        
+        .token-selector { display: flex; gap: 8px; }
+        .token-btn {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            gap: 8px; padding: 12px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            color: #8888aa; font-size: 14px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .token-btn:hover { border-color: #00d4ff; color: #fff; }
+        .token-btn.active {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            color: #00ff88;
+        }
+        .token-btn img { width: 24px; height: 24px; border-radius: 50%; }
+        
+        .modal-balance-display {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 16px;
+            background: rgba(0, 212, 255, 0.05);
+            border-radius: 8px; margin-bottom: 16px;
+        }
+        .modal-balance-label { font-size: 12px; color: #8888aa; }
+        .modal-balance-value { font-family: monospace; font-size: 16px; color: #00ff88; }
+        
+        .action-btn {
+            width: 100%; padding: 16px;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            border: none; border-radius: 12px;
+            color: #000; font-size: 16px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .action-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .action-btn.withdraw-action { background: linear-gradient(135deg, #ff6b6b, #ff8e53); }
+        
+        .modal-info-box {
+            background: rgba(255, 200, 0, 0.1);
+            border: 1px solid rgba(255, 200, 0, 0.3);
+            border-radius: 8px; padding: 12px; margin-top: 16px;
+            font-size: 12px; color: #ffc800;
+        }
+        
+        .wallet-options { display: none; flex-direction: column; gap: 8px; margin-top: 12px; }
+        .wallet-options.show { display: flex; }
+        .wallet-option-btn {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 16px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3a;
+            border-radius: 10px;
+            color: #fff; font-size: 14px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .wallet-option-btn:hover {
+            border-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+        }
+        .wallet-option-btn img { width: 28px; height: 28px; border-radius: 6px; }
+        
+        .modal-status-message {
+            padding: 12px 16px; border-radius: 8px;
+            margin-bottom: 16px; font-size: 13px; display: none;
+        }
+        .modal-status-message.show { display: block; }
+        .modal-status-message.success {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+        }
+        .modal-status-message.error {
+            background: rgba(255, 68, 68, 0.1);
+            border: 1px solid rgba(255, 68, 68, 0.3);
+            color: #ff4444;
+        }
+        .modal-status-message.info {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #00d4ff;
+        }
+        
+        .verification-section {
+            background: rgba(255, 200, 0, 0.05);
+            border: 1px solid rgba(255, 200, 0, 0.2);
+            border-radius: 12px;
+            padding: 16px; margin-bottom: 20px; text-align: center;
+        }
+        .verification-section.verified {
+            background: rgba(0, 255, 136, 0.05);
+            border-color: rgba(0, 255, 136, 0.2);
+        }
+        .verification-status { font-size: 14px; margin-bottom: 12px; }
+        .verify-btn {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #ffc800, #ff9500);
+            border: none; border-radius: 8px;
+            color: #000; font-weight: 600; font-size: 13px;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .verify-btn:hover { transform: scale(1.02); }
+        
+        .history-section {
+            margin-top: 20px; padding-top: 20px;
+            border-top: 1px solid #2a2a3a;
+        }
+        .history-title {
+            font-size: 14px; color: #8888aa; margin-bottom: 12px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .history-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; background: #1a1a2e;
+            border-radius: 8px; margin-bottom: 8px;
+        }
+        .history-item-left { display: flex; align-items: center; gap: 10px; }
+        .history-item-icon {
+            width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 14px;
+        }
+        .history-item-icon.deposit { background: rgba(0, 255, 136, 0.1); color: #00ff88; }
+        .history-item-icon.withdrawal { background: rgba(255, 136, 0, 0.1); color: #ff8800; }
+        .history-item-type { font-size: 13px; color: #fff; }
+        .history-item-date { font-size: 11px; color: #666; }
+        .history-item-amount { font-family: monospace; font-size: 14px; }
+        .history-item-amount.deposit { color: #00ff88; }
+        .history-item-amount.withdrawal { color: #ff8800; }
+        .history-item-status {
+            font-size: 10px; padding: 3px 8px;
+            border-radius: 4px; text-transform: uppercase;
+        }
+        .history-item-status.confirmed { background: rgba(0, 255, 136, 0.1); color: #00ff88; }
+        .history-item-status.pending { background: rgba(255, 200, 0, 0.1); color: #ffc800; }
+        .history-item-status.completed { background: rgba(0, 255, 136, 0.1); color: #00ff88; }
+        .history-item-status.approved { background: rgba(0, 212, 255, 0.1); color: #00d4ff; }
+        .history-item-status.rejected { background: rgba(255, 68, 68, 0.1); color: #ff4444; }
+        
+        .loading-spinner {
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: modalSpin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+        @keyframes modalSpin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">₿</div>
+                <div class="logo-text">
+                    <h1>BTC/USDT PERP</h1>
+                    <span>EMA VOLATILITY + JUMP DIFFUSION • 5K PATHS</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="header-stat">
+                    <div class="header-stat-label">TIME</div>
+                    <div class="header-stat-value" id="currentTime">--:--:--</div>
+                </div>
+                <div class="header-stat" id="volStat" title="Exponentially weighted (60s half-life, 1.1x buffer)">
+                    <div class="header-stat-label">VOLATILITY</div>
+                    <div class="header-stat-value" style="color: #ff88ff;" id="volatility">--%</div>
+                </div>
+                <div class="header-stat" id="jumpStat">
+                    <div class="header-stat-label">JUMPS</div>
+                    <div class="header-stat-value" style="color: #ffaa00;" id="jumpIntensity">--</div>
+                </div>
+                <div class="header-stat">
+                    <div class="header-stat-label">TRADES</div>
+                    <div class="header-stat-value" style="color: #fff;" id="tradeCount">0</div>
+                </div>
+                <div class="connection-status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connecting...</span>
+                </div>
+                <!-- MODE TOGGLE (Demo/Real) -->
+                <div class="mode-toggle-container">
+                    <span class="mode-label demo-label active" id="demoLabel">DEMO</span>
+                    <label class="mode-toggle">
+                        <input type="checkbox" id="modeToggle" onchange="toggleTradingMode()">
+                        <span class="mode-slider"></span>
+                    </label>
+                    <span class="mode-label real-label" id="realLabel">REAL</span>
+                </div>
+                <button class="wallet-btn" id="walletMainBtn" onclick="openDepositModal()">
+                    <span class="wallet-icon">💳</span>
+                    <span id="walletMainText">Deposit / Withdraw</span>
+                </button>
+            </div>
+        </header>
+
+        <section class="price-section">
+            <div class="main-price">
+                <div class="price-label">BTC Price</div>
+                <div class="price-value" id="currentPrice">$--,---.--</div>
+                <div class="price-change">
+                    <span class="change-badge positive" id="priceChange">+0.00%</span>
+                    <span style="color: #8888aa; font-size: 14px;" id="priceChangeAbs">$0.00</span>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">24h High</div>
+                    <div class="stat-value high" id="high24h">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">24h Low</div>
+                    <div class="stat-value low" id="low24h">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">24h Volume</div>
+                    <div class="stat-value vol" id="volume24h">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Sim Paths</div>
+                    <div class="stat-value" style="color: #ffc800;">5,000</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="trading-panel" id="tradingPanel">
+            <!-- Real Money Mode Banner -->
+            <div class="real-mode-banner" id="realModeBanner">
+                💰 <strong>REAL MONEY MODE</strong> — You are trading with deposited funds. Trade responsibly!
+            </div>
+            
+            <div class="balance-section">
+                <div class="balance-item" id="balanceItem">
+                    <div class="balance-label">
+                        BALANCE
+                        <span class="balance-mode-indicator demo" id="balanceModeIndicator">DEMO</span>
+                    </div>
+                    <div class="balance-value" id="balanceDisplay">$10,000.00</div>
+                </div>
+                <div class="balance-item pnl">
+                    <div class="balance-label">P&L</div>
+                    <div class="balance-value" id="pnlDisplay">$0.00</div>
+                </div>
+                <div class="balance-item wins">
+                    <div class="balance-label">WINS</div>
+                    <div class="balance-value" id="winsDisplay">0</div>
+                </div>
+                <div class="balance-item losses">
+                    <div class="balance-label">LOSSES</div>
+                    <div class="balance-value" id="lossesDisplay">0</div>
+                </div>
+            </div>
+            <div class="bet-controls">
+                <div class="bet-size-section">
+                    <label class="bet-label">BET SIZE</label>
+                    <div class="bet-input-group">
+                        <button class="bet-btn" onclick="adjustBet(-100)">-100</button>
+                        <button class="bet-btn" onclick="adjustBet(-10)">-10</button>
+                        <input type="number" class="bet-input" id="betSizeInput" value="100" min="1" max="10000" onchange="updateBetSize(this.value)">
+                        <button class="bet-btn" onclick="adjustBet(+10)">+10</button>
+                        <button class="bet-btn" onclick="adjustBet(+100)">+100</button>
+                    </div>
+                    <div class="quick-bets">
+                        <button class="quick-btn" onclick="setBet(10)">$10</button>
+                        <button class="quick-btn" onclick="setBet(50)">$50</button>
+                        <button class="quick-btn" onclick="setBet(100)">$100</button>
+                        <button class="quick-btn" onclick="setBet(500)">$500</button>
+                        <button class="quick-btn" onclick="setBet(1000)">$1K</button>
+                        <button class="quick-btn" onclick="setBet(balance)">ALL IN</button>
+                        <button class="quick-btn" style="background: rgba(255,68,68,0.2); border-color: rgba(255,68,68,0.4); color: #ff4444;" onclick="resetDemo()">RESET</button>
+                    </div>
+                    <div class="house-edge-section">
+                        <label class="house-edge-label">HOUSE EDGE</label>
+                        <div class="house-edge-display" id="houseEdgeDisplay">50%</div>
+                        <input type="range" class="house-edge-slider" id="houseEdgeSlider" 
+                               min="5" max="95" step="5" value="50" 
+                               oninput="updateHouseEdge(this.value)">
+                        <div class="house-edge-range">
+                            <span>5%</span>
+                            <span>50%</span>
+                            <span>95%</span>
+                        </div>
+                    </div>
+                    <div class="auto-bet-section">
+                        <div class="auto-bet-row">
+                            <label class="auto-bet-label">AUTO-BET</label>
+                            <button class="auto-bet-toggle" id="autoBetToggle" onclick="toggleAutoBet()">OFF</button>
+                        </div>
+                        <div class="auto-bet-row">
+                            <span class="auto-bet-threshold-label">Min Multiplier:</span>
+                            <div class="auto-bet-input-group">
+                                <button class="auto-bet-adj-btn" onclick="adjustAutoBetThreshold(-1)">-</button>
+                                <input type="number" class="auto-bet-input" id="autoBetThreshold" value="5" min="1" max="50" step="1" onchange="updateAutoBetThreshold(this.value)">
+                                <span class="auto-bet-x">x</span>
+                                <button class="auto-bet-adj-btn" onclick="adjustAutoBetThreshold(1)">+</button>
+                            </div>
+                        </div>
+                        <div class="pattern-section">
+                            <label class="pattern-label">PATTERN</label>
+                            <div class="pattern-buttons">
+                                <button class="pattern-btn active" id="patternThreshold" onclick="setPattern('threshold')" title="Bet on any cell above multiplier threshold">
+                                    <span class="pattern-preview">⊞</span> THRESHOLD
+                                </button>
+                                <button class="pattern-btn" id="patternLine" onclick="setPattern('line')" title="Horizontal line at current price">
+                                    <span class="pattern-preview">≡</span> LINE
+                                </button>
+                                <button class="pattern-btn" id="patternCheckerboard" onclick="setPattern('checkerboard')" title="Alternating checkerboard pattern">
+                                    <span class="pattern-preview">▚</span> CHECKER
+                                </button>
+                                <button class="pattern-btn" id="patternPyramid" onclick="setPattern('pyramid')" title="Expanding pyramid: 1→3→5 cells">
+                                    <span class="pattern-preview">△</span> PYRAMID
+                                </button>
+                                <button class="pattern-btn" id="patternInversePyramid" onclick="setPattern('inverse_pyramid')" title="Contracting pyramid: 5→3→1 cells">
+                                    <span class="pattern-preview">▽</span> INV-PYR
+                                </button>
+                            </div>
+                            <div class="pattern-dimensions">
+                                <div class="dimension-control">
+                                    <span class="dimension-label">LENGTH</span>
+                                    <span class="dimension-value" id="lengthValue">5</span>
+                                    <input type="range" class="dimension-slider" id="patternLengthSlider" 
+                                           min="1" max="12" value="5" 
+                                           oninput="updatePatternLength(this.value)">
+                                </div>
+                                <div class="dimension-control">
+                                    <span class="dimension-label">WIDTH</span>
+                                    <span class="dimension-value" id="widthValue">3</span>
+                                    <input type="range" class="dimension-slider" id="patternWidthSlider" 
+                                           min="1" max="11" value="3" 
+                                           oninput="updatePatternWidth(this.value)">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="auto-bet-stats" id="autoBetStats">
+                            Bets placed: <span id="autoBetCount">0</span> | Pattern: <span id="patternName">Threshold</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <h2 class="chart-title">BTC-USDT Perp • 10 sec × $10 • Full View</h2>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <span style="width:12px;height:3px;background:#00d4ff;border-radius:2px;"></span> Price
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:3px;height:12px;background:#ffc800;border-radius:2px;"></span> NOW
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:10px;height:10px;background:#00ff88;border-radius:2px;"></span> 1-2x
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:10px;height:10px;background:#ffff00;border-radius:2px;"></span> 5-10x
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:10px;height:10px;background:#ff8800;border-radius:2px;"></span> 20-50x
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:10px;height:10px;background:#ff0066;border-radius:2px;"></span> 100x+
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:10px;height:10px;border:2px dashed #00dcff;border-radius:2px;"></span> Drag Select
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:10px;height:10px;border:2px dashed #ff8800;border-radius:2px;"></span> Pattern
+                    </div>
+                </div>
+            </div>
+            <canvas id="chart"></canvas>
+        </div>
+
+        <footer class="footer">
+            🎮 DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • 50% House Edge • 🔊 • Click or Drag to select cells
+        </footer>
+    </div>
+
+    <!-- ================================================
+         DEPOSIT/WITHDRAWAL MODAL
+         ================================================ -->
+    <div class="modal-overlay" id="depositModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 class="modal-title">💰 Deposit & Withdraw</h2>
+                <button class="modal-close" onclick="closeDepositModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Status Message -->
+                <div class="modal-status-message" id="modalStatus"></div>
+                
+                <!-- Wallet Connection -->
+                <div class="wallet-section">
+                    <div class="wallet-status" id="walletStatusConnected" style="display: none;">
+                        <div class="wallet-info">
+                            <div class="modal-status-dot"></div>
+                            <span class="wallet-address" id="connectedWalletAddress">0x...</span>
+                        </div>
+                        <button class="disconnect-modal-btn" onclick="disconnectWallet()">Disconnect</button>
+                    </div>
+                    <div id="walletStatusDisconnected">
+                        <button class="wallet-connect-modal-btn" onclick="toggleWalletOptions()" id="connectWalletBtn">
+                            🔗 Connect Wallet
+                        </button>
+                        <div class="wallet-options" id="walletOptions">
+                            <button class="wallet-option-btn" onclick="connectWallet('metamask')">
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" alt="MetaMask">
+                                <span>MetaMask</span>
+                            </button>
+                            <button class="wallet-option-btn" onclick="connectWallet('rabby')">
+                                <img src="https://rabby.io/assets/images/logo.svg" alt="Rabby">
+                                <span>Rabby</span>
+                            </button>
+                            <button class="wallet-option-btn" onclick="connectWallet('phantom')">
+                                <img src="https://phantom.app/img/phantom-logo.svg" alt="Phantom">
+                                <span>Phantom (Solana)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chain Selector -->
+                <div class="modal-form-group">
+                    <label>Network</label>
+                    <div class="chain-selector">
+                        <button class="chain-btn active" data-chain="ethereum" onclick="selectChain('ethereum')">
+                            <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH">
+                            Ethereum
+                        </button>
+                        <button class="chain-btn" data-chain="arbitrum" onclick="selectChain('arbitrum')">
+                            <img src="https://cryptologos.cc/logos/arbitrum-arb-logo.png" alt="ARB">
+                            Arbitrum
+                        </button>
+                        <button class="chain-btn" data-chain="base" onclick="selectChain('base')">
+                            <img src="https://avatars.githubusercontent.com/u/108554348" alt="Base">
+                            Base
+                        </button>
+                        <button class="chain-btn" data-chain="solana" onclick="selectChain('solana')">
+                            <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL">
+                            Solana
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Tabs -->
+                <div class="modal-tabs">
+                    <button class="modal-tab active" id="depositTabBtn" onclick="switchModalTab('deposit')">Deposit</button>
+                    <button class="modal-tab" id="withdrawTabBtn" onclick="switchModalTab('withdraw')">Withdraw</button>
+                </div>
+                
+                <!-- Deposit Form -->
+                <div id="depositFormModal">
+                    <div class="modal-form-group">
+                        <label>Token</label>
+                        <div class="token-selector">
+                            <button class="token-btn active" data-token="USDC" onclick="selectDepositToken('USDC')">
+                                <img src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC">
+                                USDC
+                            </button>
+                            <button class="token-btn" data-token="USDT" onclick="selectDepositToken('USDT')">
+                                <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT">
+                                USDT
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-balance-display">
+                        <span class="modal-balance-label">Wallet Balance</span>
+                        <span class="modal-balance-value" id="walletTokenBalance">--</span>
+                    </div>
+                    
+                    <div class="modal-form-group">
+                        <label>Amount</label>
+                        <input type="number" class="modal-form-input" id="depositAmountInput" placeholder="0.00" step="0.01" min="1">
+                    </div>
+                    
+                    <button class="action-btn" id="depositActionBtn" onclick="executeDeposit()" disabled>
+                        Deposit
+                    </button>
+                    
+                    <div class="modal-info-box">
+                        💡 Deposits are verified on-chain and credited automatically. Make sure you're on the correct network.
+                    </div>
+                </div>
+                
+                <!-- Withdraw Form -->
+                <div id="withdrawFormModal" style="display: none;">
+                    <!-- Verification Section -->
+                    <div class="verification-section" id="verificationSection">
+                        <div class="verification-status" id="verificationStatus">
+                            🔐 Please verify wallet ownership to request withdrawals
+                        </div>
+                        <button class="verify-btn" id="verifyBtn" onclick="verifyWallet()">
+                            Sign Message to Verify
+                        </button>
+                    </div>
+                    
+                    <div id="withdrawFormFields" style="display: none;">
+                        <div class="modal-form-group">
+                            <label>Token</label>
+                            <div class="token-selector">
+                                <button class="token-btn active" data-token="USDC" onclick="selectWithdrawToken('USDC')">
+                                    <img src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC">
+                                    USDC
+                                </button>
+                                <button class="token-btn" data-token="USDT" onclick="selectWithdrawToken('USDT')">
+                                    <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT">
+                                    USDT
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-balance-display">
+                            <span class="modal-balance-label">Available Balance</span>
+                            <span class="modal-balance-value" id="availableWithdrawBalance">$0.00</span>
+                        </div>
+                        
+                        <div class="modal-form-group">
+                            <label>Amount</label>
+                            <input type="number" class="modal-form-input" id="withdrawAmountInput" placeholder="0.00" step="0.01" min="1">
+                        </div>
+                        
+                        <button class="action-btn withdraw-action" id="withdrawActionBtn" onclick="executeWithdraw()" disabled>
+                            Request Withdrawal
+                        </button>
+                        
+                        <div class="modal-info-box">
+                            💡 Withdrawals are processed manually within 24-48 hours. Funds will be sent to your connected wallet.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- History Section -->
+                <div class="history-section" id="historySection" style="display: none;">
+                    <h3 class="history-title">Recent Transactions</h3>
+                    <div id="historyList">
+                        <div style="color: #666; text-align: center; padding: 20px;">No transactions yet</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let price = null;
+        let prevPrice = null;
+        let startPrice = null;
+        let priceHistory = [];
+        let tradeCount = 0;
+        let ws = null;
+        let gridMultipliers = {};
+        let simulationRunning = false;
+        let estimatedVolatility = 0.9;
+        let lastSimTime = 0;
+        
+        // Smooth grid centering (spring physics) - NOT for price line
+        let displayPrice = null;  // Smoothed price for grid centering only
+        let priceVelocity = 0;
+        const priceSmoothingFactor = 0.25; // Higher = faster response
+        
+        // Trading state - these are the ACTIVE values (sync'd from mode-specific vars)
+        let balance = 10000;
+        let betSize = 100;
+        let totalWins = 0;
+        let totalLosses = 0;
+        let pendingBets = 0;
+        let houseEdge = 0.50;
+        let startingBalance = 10000; // Now let instead of const for mode switching
+        
+        // Locked boxes - will be swapped when mode changes
+        let lockedBoxes = {};
+        
+        // Auto-bet state
+        let autoBetEnabled = false;
+        let autoBetThreshold = 5;
+        let autoBetCount = 0;
+        let autoBetLocked = new Set();
+        let autoBetPattern = 'threshold';
+        let patternCells = new Set();
+        let patternLength = 5;
+        let patternWidth = 3;
+        
+        // DOM elements for trading UI
+        let balanceEl, pnlEl, winsEl, lossesEl, betInput;
+        
+        function initTradingUI() {
+            balanceEl = document.getElementById('balanceDisplay');
+            pnlEl = document.getElementById('pnlDisplay');
+            winsEl = document.getElementById('winsDisplay');
+            lossesEl = document.getElementById('lossesDisplay');
+            betInput = document.getElementById('betSizeInput');
+        }
+        
+        // Update balance display - MODE AWARE
+        function updateBalanceDisplay() {
+            if (!balanceEl) initTradingUI();
+            if (!balanceEl) return;
+            
+            // Save current state back to mode-specific variables
+            if (typeof saveTradingStateToMode === 'function') {
+                saveTradingStateToMode();
+            }
+            
+            balanceEl.textContent = '$' + balance.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            
+            // Color based on mode
+            if (typeof isRealMode !== 'undefined' && isRealMode) {
+                balanceEl.style.color = '#00ff88';
+            } else {
+                balanceEl.style.color = '#00d4ff';
+            }
+            
+            // P&L only reflects resolved bets
+            const pnl = (balance + pendingBets) - startingBalance;
+            pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+            pnlEl.className = 'balance-value ' + (pnl >= 0 ? 'positive' : 'negative');
+            
+            winsEl.textContent = totalWins;
+            lossesEl.textContent = totalLosses;
+        }
+        
+        // Bet control functions
+        function adjustBet(amount) {
+            if (!betInput) initTradingUI();
+            betSize = Math.max(1, Math.min(balance, betSize + amount));
+            if (betInput) betInput.value = betSize;
+        }
+        
+        function setBet(amount) {
+            if (!betInput) initTradingUI();
+            betSize = Math.max(1, Math.min(balance, amount));
+            if (betInput) betInput.value = betSize;
+        }
+        
+        function updateBetSize(value) {
+            if (!betInput) initTradingUI();
+            betSize = Math.max(1, Math.min(balance, parseInt(value) || 1));
+            if (betInput) betInput.value = betSize;
+        }
+        
+        // Reset function - MODE AWARE
+        function resetDemo() {
+            if (!betInput) initTradingUI();
+            
+            // Only allow reset in demo mode
+            if (typeof isRealMode !== 'undefined' && isRealMode) {
+                alert('Cannot reset in Real Money mode.\n\nUse withdrawals to manage your funds.');
+                return;
+            }
+            
+            // Reset demo mode state
+            balance = 10000;
+            startingBalance = 10000;
+            betSize = 100;
+            totalWins = 0;
+            totalLosses = 0;
+            pendingBets = 0;
+            
+            // Also reset mode-specific vars
+            if (typeof demoBalance !== 'undefined') {
+                demoBalance = 10000;
+                demoStartingBalance = 10000;
+                demoPendingBets = 0;
+                demoTotalWins = 0;
+                demoTotalLosses = 0;
+                demoLockedBoxes = {};
+            }
+            
+            if (betInput) betInput.value = betSize;
+            
+            // Clear locked boxes
+            for (const key in lockedBoxes) {
+                delete lockedBoxes[key];
+            }
+            
+            // Reset auto-bet state
+            autoBetCount = 0;
+            autoBetLocked.clear();
+            const autoBetCountEl = document.getElementById('autoBetCount');
+            if (autoBetCountEl) autoBetCountEl.textContent = '0';
+            
+            updateBalanceDisplay();
+            console.log('Demo reset to $10,000');
+        }
+        
+        // House edge control
+        function updateHouseEdge(value) {
+            houseEdge = parseInt(value) / 100;
+            document.getElementById('houseEdgeDisplay').textContent = value + '%';
+            // Update footer only in demo mode
+            const footer = document.querySelector('.footer');
+            if (footer && (typeof isRealMode === 'undefined' || !isRealMode)) {
+                footer.innerHTML = '🎮 DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • ' + value + '% House Edge • 🔊 • Click or Drag to select cells';
+            }
+            console.log('House edge set to ' + value + '%');
+        }
+        
+        // Auto-bet functions
+        function toggleAutoBet() {
+            autoBetEnabled = !autoBetEnabled;
+            const btn = document.getElementById('autoBetToggle');
+            if (btn) {
+                btn.textContent = autoBetEnabled ? 'ON' : 'OFF';
+                btn.classList.toggle('active', autoBetEnabled);
+            }
+            console.log('Auto-bet:', autoBetEnabled ? 'ENABLED' : 'DISABLED', '| Threshold:', autoBetThreshold + 'x');
+            
+            if (autoBetEnabled) {
+                // Clear the locked set so we can bet on current opportunities
+                autoBetLocked.clear();
+                // Run immediately
+                runAutoBet();
+            }
+        }
+        
+        function adjustAutoBetThreshold(delta) {
+            autoBetThreshold = Math.max(1, Math.min(50, autoBetThreshold + delta));
+            document.getElementById('autoBetThreshold').value = autoBetThreshold;
+        }
+        
+        function updateAutoBetThreshold(value) {
+            autoBetThreshold = Math.max(1, Math.min(50, parseInt(value) || 5));
+            document.getElementById('autoBetThreshold').value = autoBetThreshold;
+        }
+        
+        // Pattern selector
+        function setPattern(pattern) {
+            autoBetPattern = pattern;
+            
+            // Update button states
+            document.querySelectorAll('.pattern-btn').forEach(btn => btn.classList.remove('active'));
+            const btnId = 'pattern' + pattern.charAt(0).toUpperCase() + pattern.slice(1).replace('_p', 'P');
+            const btn = document.getElementById(btnId);
+            if (btn) btn.classList.add('active');
+            
+            // Update display name
+            const names = {
+                'threshold': 'Threshold',
+                'line': 'Line',
+                'checkerboard': 'Checker',
+                'pyramid': 'Pyramid',
+                'inverse_pyramid': 'Inv-Pyramid'
+            };
+            document.getElementById('patternName').textContent = names[pattern] || pattern;
+            
+            // Clear locked set to allow new pattern bets
+            autoBetLocked.clear();
+            
+            // Update pattern cells for visualization
+            updatePatternCells();
+            
+            console.log('Pattern set to:', pattern);
+        }
+        
+        // Pattern dimension functions
+        function updatePatternLength(value) {
+            patternLength = Math.max(1, Math.min(12, parseInt(value) || 5));
+            document.getElementById('lengthValue').textContent = patternLength;
+            document.getElementById('patternLengthSlider').value = patternLength;
+            updatePatternCells();
+        }
+        
+        function updatePatternWidth(value) {
+            patternWidth = Math.max(1, Math.min(11, parseInt(value) || 3));
+            document.getElementById('widthValue').textContent = patternWidth;
+            document.getElementById('patternWidthSlider').value = patternWidth;
+            updatePatternCells();
+        }
+        
+        // Generate pattern cells based on current price and time
+        function getPatternCellKeys() {
+            if (!price) return [];
+            
+            const now = Date.now();
+            const msPerCell = 10000;
+            const pricePerCell = 10;
+            const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
+            const centerPrice = Math.round(price / pricePerCell) * pricePerCell;
+            
+            const cells = [];
+            
+            // Calculate spread from width (width=1 → spread=0, width=3 → spread=1, width=5 → spread=2)
+            const halfWidth = Math.floor((patternWidth - 1) / 2);
+            const endTime = 2 + patternLength - 1; // Start at t=2, go for patternLength cells
+            
+            switch(autoBetPattern) {
+                case 'line':
+                    // Horizontal line - uses both length and width
+                    for (let t = 2; t <= endTime; t++) {
+                        const cellTs = currentCellStart + t * msPerCell;
+                        for (let p = -halfWidth; p <= halfWidth; p++) {
+                            const priceLevel = centerPrice + p * pricePerCell;
+                            cells.push(`${cellTs}_${priceLevel}`);
+                        }
+                    }
+                    break;
+                    
+                case 'checkerboard':
+                    // Alternating cells in a checkerboard pattern
+                    for (let t = 2; t <= endTime; t++) {
+                        for (let p = -halfWidth; p <= halfWidth; p++) {
+                            if ((t + p) % 2 === 0) {
+                                const cellTs = currentCellStart + t * msPerCell;
+                                const priceLevel = centerPrice + p * pricePerCell;
+                                cells.push(`${cellTs}_${priceLevel}`);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case 'pyramid':
+                    // Expanding pyramid: starts narrow, expands to max width
+                    for (let t = 2; t <= endTime; t++) {
+                        const cellTs = currentCellStart + t * msPerCell;
+                        // Calculate spread for this time step (grows from 0 to halfWidth)
+                        const progress = (t - 2) / Math.max(1, patternLength - 1);
+                        const spread = Math.min(halfWidth, Math.round(progress * halfWidth));
+                        for (let p = -spread; p <= spread; p++) {
+                            const priceLevel = centerPrice + p * pricePerCell;
+                            cells.push(`${cellTs}_${priceLevel}`);
+                        }
+                    }
+                    break;
+                    
+                case 'inverse_pyramid':
+                    // Contracting pyramid: starts wide, contracts to narrow
+                    for (let t = 2; t <= endTime; t++) {
+                        const cellTs = currentCellStart + t * msPerCell;
+                        // Calculate spread for this time step (shrinks from halfWidth to 0)
+                        const progress = (t - 2) / Math.max(1, patternLength - 1);
+                        const spread = Math.max(0, halfWidth - Math.round(progress * halfWidth));
+                        for (let p = -spread; p <= spread; p++) {
+                            const priceLevel = centerPrice + p * pricePerCell;
+                            cells.push(`${cellTs}_${priceLevel}`);
+                        }
+                    }
+                    break;
+                    
+                case 'threshold':
+                default:
+                    // No fixed pattern - handled by threshold logic
+                    break;
+            }
+            
+            return cells;
+        }
+        
+        // Update pattern cells for visualization (called periodically)
+        function updatePatternCells() {
+            patternCells.clear();
+            
+            if (autoBetPattern === 'threshold') return;
+            
+            const cellKeys = getPatternCellKeys();
+            const now = Date.now();
+            
+            for (const key of cellKeys) {
+                // Only include future cells with >10s until start
+                const data = gridMultipliers[key];
+                if (data && data.cellTs > now && (data.cellTs - now) >= 10000) {
+                    // Also check threshold if not already locked
+                    if (!lockedBoxes[key]) {
+                        const mult = getAdjustedMultiplier(data, now, price);
+                        if (mult >= autoBetThreshold) {
+                            patternCells.add(key);
+                        }
+                    }
+                }
+            }
+        }
+        
+        function runAutoBet() {
+            if (!autoBetEnabled || !price) return;
+            
+            const now = Date.now();
+            const msPerCell = 10000;
+            let betsPlaced = 0;
+            
+            // Update pattern visualization
+            updatePatternCells();
+            
+            // Get cells to consider based on pattern
+            let cellsToCheck;
+            if (autoBetPattern === 'threshold') {
+                // Original behavior: check all cells
+                cellsToCheck = Object.keys(gridMultipliers);
+            } else {
+                // Pattern mode: only check pattern cells
+                cellsToCheck = getPatternCellKeys();
+            }
+            
+            for (const key of cellsToCheck) {
+                // Skip if already locked or already auto-bet attempted
+                if (lockedBoxes[key] || autoBetLocked.has(key)) continue;
+                
+                const data = gridMultipliers[key];
+                if (!data) continue;
+                
+                // Skip past cells
+                if (data.cellTs <= now) continue;
+                
+                // Skip cells closing within 10 seconds
+                const timeUntilStart = data.cellTs - now;
+                if (timeUntilStart < 10000) continue;
+                
+                // Calculate current multiplier
+                const mult = getAdjustedMultiplier(data, now, price);
+                
+                // Check if meets threshold
+                if (mult >= autoBetThreshold) {
+                    // Check balance
+                    if (betSize > balance) {
+                        console.log('Auto-bet: Insufficient balance');
+                        break;
+                    }
+                    
+                    // Place the bet
+                    if (lockCell(key)) {
+                        autoBetLocked.add(key);
+                        betsPlaced++;
+                        autoBetCount++;
+                        document.getElementById('autoBetCount').textContent = autoBetCount;
+                        console.log('Auto-bet placed:', key, 'Mult:', mult.toFixed(2) + 'x', 'Pattern:', autoBetPattern);
+                    }
+                }
+            }
+            
+            if (betsPlaced > 0) {
+                playClickSound();
+            }
+        }
+        
+        // Clean up old entries from autoBetLocked periodically
+        function cleanAutoBetLocked() {
+            const now = Date.now();
+            for (const key of autoBetLocked) {
+                const [ts] = key.split('_');
+                const cellTs = parseInt(ts);
+                // Remove if cell has expired (more than 10 seconds past)
+                if (cellTs + 10000 < now) {
+                    autoBetLocked.delete(key);
+                }
+            }
+        }
+        
+        // Locked boxes state
+        // Key: "timestamp_priceLevel", Value: { multiplier, touched, expired, priceLevel, cellTs, lockedAt, betAmount }
+        let lockedBoxes = {};
+        
+        // Hover state for smooth highlighting
+        let hoveredCell = null;
+        
+        // Drag selection state
+        let isDragging = false;
+        let dragSelectedCells = new Set(); // Cells selected during drag (before locking)
+        
+        // Audio context for sound effects
+        let audioCtx = null;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            return audioCtx;
+        }
+        
+        // Click sound - short snappy click
+        function playClickSound() {
+            try {
+                const ctx = initAudio();
+                if (ctx.state === 'suspended') ctx.resume();
+                
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.05);
+                
+                gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+                
+                oscillator.start(ctx.currentTime);
+                oscillator.stop(ctx.currentTime + 0.08);
+                
+                // Add a subtle "tick" layer
+                const tick = ctx.createOscillator();
+                const tickGain = ctx.createGain();
+                tick.connect(tickGain);
+                tickGain.connect(ctx.destination);
+                
+                tick.type = 'square';
+                tick.frequency.setValueAtTime(1200, ctx.currentTime);
+                tickGain.gain.setValueAtTime(0.1, ctx.currentTime);
+                tickGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.03);
+                
+                tick.start(ctx.currentTime);
+                tick.stop(ctx.currentTime + 0.03);
+            } catch (e) {
+                console.log('Audio not available');
+            }
+        }
+        
+        // Cash register "cha-ching" sound for wins
+        function playCashRegisterSound() {
+            try {
+                const ctx = initAudio();
+                if (ctx.state === 'suspended') ctx.resume();
+                
+                // First "cha" - drawer opening sound
+                const noise = ctx.createBufferSource();
+                const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+                const noiseData = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < noiseData.length; i++) {
+                    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.02));
+                }
+                noise.buffer = noiseBuffer;
+                
+                const noiseFilter = ctx.createBiquadFilter();
+                noiseFilter.type = 'highpass';
+                noiseFilter.frequency.value = 2000;
+                
+                const noiseGain = ctx.createGain();
+                noiseGain.gain.setValueAtTime(0.15, ctx.currentTime);
+                
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(ctx.destination);
+                noise.start(ctx.currentTime);
+                
+                // Bell/chime sounds - the "ching" part
+                const frequencies = [1567.98, 2093.00, 2637.02]; // G6, C7, E7 - major chord
+                const delays = [0.08, 0.1, 0.12];
+                
+                frequencies.forEach((freq, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + delays[i]);
+                    
+                    gain.gain.setValueAtTime(0, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.25 - i * 0.05, ctx.currentTime + delays[i]);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delays[i] + 0.4);
+                    
+                    osc.start(ctx.currentTime + delays[i]);
+                    osc.stop(ctx.currentTime + delays[i] + 0.5);
+                });
+                
+                // Add a sparkle/shimmer effect
+                for (let i = 0; i < 3; i++) {
+                    const sparkle = ctx.createOscillator();
+                    const sparkleGain = ctx.createGain();
+                    
+                    sparkle.connect(sparkleGain);
+                    sparkleGain.connect(ctx.destination);
+                    
+                    sparkle.type = 'sine';
+                    const sparkleFreq = 3000 + Math.random() * 2000;
+                    sparkle.frequency.setValueAtTime(sparkleFreq, ctx.currentTime + 0.15 + i * 0.05);
+                    
+                    sparkleGain.gain.setValueAtTime(0.08, ctx.currentTime + 0.15 + i * 0.05);
+                    sparkleGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25 + i * 0.05);
+                    
+                    sparkle.start(ctx.currentTime + 0.15 + i * 0.05);
+                    sparkle.stop(ctx.currentTime + 0.3 + i * 0.05);
+                }
+                
+                // Final "ding" - register bell
+                const bell = ctx.createOscillator();
+                const bellGain = ctx.createGain();
+                
+                bell.connect(bellGain);
+                bellGain.connect(ctx.destination);
+                
+                bell.type = 'sine';
+                bell.frequency.setValueAtTime(3135.96, ctx.currentTime + 0.2); // G7
+                
+                bellGain.gain.setValueAtTime(0.3, ctx.currentTime + 0.2);
+                bellGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+                
+                bell.start(ctx.currentTime + 0.2);
+                bell.stop(ctx.currentTime + 0.8);
+                
+            } catch (e) {
+                console.log('Audio not available');
+            }
+        }
+        
+        // Loss sound - descending tone
+        function playLossSound() {
+            try {
+                const ctx = initAudio();
+                if (ctx.state === 'suspended') ctx.resume();
+                
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.3);
+                
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.3);
+                
+                // Add a second lower tone
+                const osc2 = ctx.createOscillator();
+                const gain2 = ctx.createGain();
+                
+                osc2.connect(gain2);
+                gain2.connect(ctx.destination);
+                
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(250, ctx.currentTime + 0.1);
+                osc2.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.35);
+                
+                gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.1);
+                gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                
+                osc2.start(ctx.currentTime + 0.1);
+                osc2.stop(ctx.currentTime + 0.4);
+            } catch (e) {
+                console.log('Audio not available');
+            }
+        }
+        
+        // Helper: Get cell key from mouse position (returns null if invalid)
+        function getCellKeyFromPosition(x, y) {
+            if (!window.chartParams) return null;
+            
+            const { padding, chartWidth, chartHeight, timeStart, timeEnd, minPrice, maxPrice, 
+                    pricePerCell, msPerCell } = window.chartParams;
+            
+            // Check if within chart area
+            if (x < padding.left || x > padding.left + chartWidth) return null;
+            if (y < padding.top || y > padding.top + chartHeight) return null;
+            
+            // Convert to time and price
+            const clickTime = timeStart + ((x - padding.left) / chartWidth) * (timeEnd - timeStart);
+            const clickPrice = maxPrice - ((y - padding.top) / chartHeight) * (maxPrice - minPrice);
+            
+            // Find cell boundaries
+            const cellStart = Math.floor(clickTime / msPerCell) * msPerCell;
+            const priceLevel = Math.floor(clickPrice / pricePerCell) * pricePerCell;
+            
+            const currentNow = Date.now();
+            const timeUntilStart = cellStart - currentNow;
+            
+            // Only allow future cells with more than 10 seconds until start
+            if (cellStart <= currentNow) return null;
+            if (timeUntilStart < 10000) return null;
+            
+            return { key: `${cellStart}_${priceLevel}`, cellStart, priceLevel };
+        }
+        
+        // Helper: Lock a single cell as a bet (returns true if successful)
+        function lockCell(key) {
+            // Already locked?
+            if (lockedBoxes[key]) return false;
+            
+            // Get multiplier data
+            const multiplierData = gridMultipliers[key];
+            if (!multiplierData) return false;
+            
+            // Calculate adjusted multiplier
+            const adjustedMult = getAdjustedMultiplier(multiplierData, Date.now(), price);
+            
+            // Check balance
+            if (betSize > balance) {
+                // In real mode with zero balance, prompt to deposit
+                if (typeof isRealMode !== 'undefined' && isRealMode && balance === 0) {
+                    console.log('Real mode: Zero balance - need deposit');
+                    if (typeof showModalStatus === 'function') {
+                        showModalStatus('Insufficient balance. Please deposit funds.', 'error');
+                    }
+                } else {
+                    console.log('Insufficient balance for cell:', key);
+                }
+                return false;
+            }
+            
+            // Deduct and track
+            balance -= betSize;
+            pendingBets += betSize;
+            updateBalanceDisplay();
+            
+            // Lock the box
+            lockedBoxes[key] = {
+                multiplier: adjustedMult,
+                cellTs: multiplierData.cellTs,
+                priceLevel: multiplierData.priceLevel,
+                touched: false,
+                expired: false,
+                lockedAt: Date.now(),
+                betAmount: betSize,
+                isRealBet: typeof isRealMode !== 'undefined' && isRealMode  // Track if this was a real money bet
+            };
+            
+            const modeTag = (typeof isRealMode !== 'undefined' && isRealMode) ? '[REAL]' : '[DEMO]';
+            console.log(modeTag, 'Bet placed:', key, 'Amount: $' + betSize, 'Multiplier:', adjustedMult.toFixed(2) + 'x');
+            return true;
+        }
+        
+        // Helper: Calculate total cost of drag selection
+        function getDragSelectionCost() {
+            let count = 0;
+            for (const key of dragSelectedCells) {
+                if (!lockedBoxes[key] && gridMultipliers[key]) {
+                    count++;
+                }
+            }
+            return count * betSize;
+        }
+        
+        // Animation easing functions
+        function easeOutElastic(t) {
+            const p = 0.3;
+            return Math.pow(2, -10 * t) * Math.sin((t - p / 4) * (2 * Math.PI) / p) + 1;
+        }
+        
+        function easeOutCubic(t) {
+            return 1 - Math.pow(1 - t, 3);
+        }
+        
+        function easeInOutQuad(t) {
+            return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        }
+
+        // DOM Elements
+        const canvas = document.getElementById('chart');
+        const ctx = canvas.getContext('2d');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const currentTimeEl = document.getElementById('currentTime');
+        const tradeCountEl = document.getElementById('tradeCount');
+        const currentPriceEl = document.getElementById('currentPrice');
+        const priceChangeEl = document.getElementById('priceChange');
+        const priceChangeAbsEl = document.getElementById('priceChangeAbs');
+        const high24hEl = document.getElementById('high24h');
+        const low24hEl = document.getElementById('low24h');
+        const volume24hEl = document.getElementById('volume24h');
+        const volatilityEl = document.getElementById('volatility');
+        const jumpIntensityEl = document.getElementById('jumpIntensity');
+
+        // Utility functions
+        const formatPrice = (p) => p ? parseFloat(p).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--,---.--';
+        const formatVolume = (v) => v ? (parseFloat(v) >= 1000 ? (parseFloat(v)/1000).toFixed(1) + 'K' : parseFloat(v).toFixed(1)) : '--';
+        const formatTime = (t) => new Date(t).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+
+        // Box-Muller transform
+        function randomNormal() {
+            let u = 0, v = 0;
+            while (u === 0) u = Math.random();
+            while (v === 0) v = Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        // Calculate volatility with exponential decay weighting
+        // Samples price at fixed 100ms intervals for consistent measurement
+        function calculateVolatility() {
+            if (priceHistory.length < 50) return 0.9; // Default 90% annualized
+            
+            const now = Date.now();
+            const halfLife = 60000; // 60 seconds half-life
+            const decayRate = Math.LN2 / halfLife;
+            const sampleInterval = 100; // 100ms between samples
+            
+            // Build time-based samples from price history
+            const returns = [];
+            const lookback = 15 * 60 * 1000; // 15 minutes
+            const startTime = now - lookback;
+            
+            // Find price at each 100ms interval
+            let lastSampleTime = startTime;
+            let lastSamplePrice = null;
+            
+            // Find initial price
+            for (const pt of priceHistory) {
+                if (pt.time >= startTime) {
+                    lastSamplePrice = pt.price;
+                    lastSampleTime = Math.floor(pt.time / sampleInterval) * sampleInterval;
+                    break;
+                }
+            }
+            
+            if (!lastSamplePrice) return 0.9;
+            
+            // Sample at 100ms intervals
+            let historyIndex = 0;
+            for (let t = lastSampleTime + sampleInterval; t <= now; t += sampleInterval) {
+                // Find the last price at or before time t
+                while (historyIndex < priceHistory.length - 1 && 
+                       priceHistory[historyIndex + 1].time <= t) {
+                    historyIndex++;
+                }
+                
+                if (historyIndex >= priceHistory.length) break;
+                
+                const currentPrice = priceHistory[historyIndex].price;
+                if (lastSamplePrice && currentPrice) {
+                    const ret = Math.log(currentPrice / lastSamplePrice);
+                    const dt = sampleInterval / 1000; // 0.1 seconds
+                    const age = now - t;
+                    const weight = Math.exp(-decayRate * age);
+                    returns.push({ret, dt, weight});
+                }
+                
+                lastSamplePrice = currentPrice;
+            }
+            
+            if (returns.length < 10) return 0.9;
+            
+            // Calculate weighted variance normalized to 1-second
+            let weightedSumSq = 0;
+            let totalWeight = 0;
+            
+            for (const r of returns) {
+                const normalized = r.ret / Math.sqrt(r.dt); // Normalize to 1-second
+                weightedSumSq += r.weight * normalized * normalized;
+                totalWeight += r.weight;
+            }
+            
+            if (totalWeight === 0) return 0.9;
+            
+            const weightedVariance = weightedSumSq / totalWeight;
+            
+            // Annualize: variance per second * seconds per year
+            const annualized = Math.sqrt(weightedVariance * 365 * 24 * 60 * 60);
+            
+            // Clamp between 25% and 500% annualized, then apply 1.1x buffer
+            const clamped = Math.max(0.25, Math.min(5.0, annualized));
+            return clamped * 1.1; // 10% vol buffer for house edge
+        }
+        
+        // Adaptive jump estimation from price history
+        // Uses threshold-based detection: returns > 3.5σ AND price move > $10 are classified as jumps
+        // Also uses exponential weighting for recent data priority
+        let estimatedJumpParams = {
+            jumpProb: 0.008,   // Default 0.8% per second
+            jumpMean: 0,       // Default symmetric
+            jumpVol: 0.003     // Default 0.3% magnitude
+        };
+        
+        function estimateJumpParameters() {
+            if (priceHistory.length < 100) return estimatedJumpParams;
+            
+            const now = Date.now();
+            const halfLife = 5000; // 5 seconds half-life for jump detection
+            const decayRate = Math.LN2 / halfLife;
+            
+            // Calculate returns at 1-second intervals
+            const sampleRate = 5; // Sample every 5th tick
+            const returns = [];
+            
+            for (let i = sampleRate; i < priceHistory.length; i += sampleRate) {
+                const dt = (priceHistory[i].time - priceHistory[i - sampleRate].time) / 1000;
+                if (dt > 0 && dt < 30) { // Filter gaps > 30s
+                    const ret = Math.log(priceHistory[i].price / priceHistory[i - sampleRate].price);
+                    const priceDiff = Math.abs(priceHistory[i].price - priceHistory[i - sampleRate].price);
+                    // Normalize to 1-second return
+                    const normalizedRet = ret / Math.sqrt(dt);
+                    const age = now - priceHistory[i].time;
+                    const weight = Math.exp(-decayRate * age);
+                    returns.push({ret: normalizedRet, weight, priceDiff});
+                }
+            }
+            
+            if (returns.length < 30) return estimatedJumpParams;
+            
+            // Calculate weighted mean and std dev of returns
+            let totalWeight = returns.reduce((a, b) => a + b.weight, 0);
+            if (totalWeight === 0) return estimatedJumpParams;
+            
+            const mean = returns.reduce((a, b) => a + b.ret * b.weight, 0) / totalWeight;
+            const variance = returns.reduce((a, b) => a + b.weight * (b.ret - mean) ** 2, 0) / totalWeight;
+            const stdDev = Math.sqrt(variance);
+            
+            if (stdDev === 0) return estimatedJumpParams;
+            
+            // Identify jumps as returns > 3.5 standard deviations OR price move > $10
+            const threshold = 3.5 * stdDev;
+            const minPriceMove = 10; // $10 move counts as jump
+            const jumpReturns = returns.filter(r => Math.abs(r.ret - mean) > threshold && r.priceDiff >= minPriceMove);
+            
+            if (jumpReturns.length < 2) {
+                // No significant jumps detected, use conservative defaults
+                return {
+                    jumpProb: 0.005,
+                    jumpMean: 0,
+                    jumpVol: stdDev * 0.5 // Use half the overall vol
+                };
+            }
+            
+            // Estimate jump parameters from detected jumps (weighted)
+            const jumpTotalWeight = jumpReturns.reduce((a, b) => a + b.weight, 0);
+            const jumpProb = Math.min(0.05, Math.max(0.001, jumpTotalWeight / totalWeight));
+            const jumpMean = jumpReturns.reduce((a, b) => a + b.ret * b.weight, 0) / jumpTotalWeight;
+            const jumpVariance = jumpReturns.reduce((a, b) => a + b.weight * (b.ret - jumpMean) ** 2, 0) / jumpTotalWeight;
+            const jumpVol = Math.sqrt(jumpVariance);
+            
+            estimatedJumpParams = {
+                jumpProb: jumpProb,
+                jumpMean: jumpMean,
+                jumpVol: Math.max(0.001, Math.min(0.02, jumpVol)) // Clamp between 0.1% and 2%
+            };
+            
+            console.log('Jump params updated:', 
+                'Prob:', (jumpProb * 100).toFixed(2) + '%',
+                'Mean:', (jumpMean * 100).toFixed(3) + '%',
+                'Vol:', (jumpVol * 100).toFixed(3) + '%',
+                'Detected:', jumpReturns.length, 'jumps from', returns.length, 'samples');
+            
+            return estimatedJumpParams;
+        }
+
+        // Monte Carlo simulation - tracks if price TOUCHES each cell during the minute
+        function runMonteCarloSimulation() {
+            if (!price || simulationRunning) return;
+            simulationRunning = true;
+
+            const NUM_PATHS = 5000;
+            const currentPrice = price;
+            const vol = calculateVolatility();
+            estimatedVolatility = vol;
+            
+            // Get adaptive jump parameters from recent price history
+            const jumpParams = estimateJumpParameters();
+            const jumpProb = jumpParams.jumpProb;
+            const jumpMean = jumpParams.jumpMean;
+            const jumpVol = jumpParams.jumpVol;
+            
+            const pricePerCell = 10; // $10 per cell
+            const msPerCell = 10000; // 10 seconds per cell
+            const now = Date.now();
+            
+            // Calculate time until each future cell boundary (10-second intervals)
+            const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
+            
+            // Per-step volatility (1 second per step for fine granularity)
+            const dt = 1 / (365 * 24 * 60 * 60); // 1 second in years
+            const volPerStep = vol * Math.sqrt(dt);
+            
+            // Price levels to track (+/- $100 from current)
+            const centerPrice = Math.round(currentPrice / pricePerCell) * pricePerCell;
+            const priceLevels = [];
+            for (let i = -5; i <= 5; i++) {
+                priceLevels.push(centerPrice + i * pricePerCell);
+            }
+            
+            // Future cells with ACTIVE windows (when each cell can be touched)
+            const futureCells = [];
+            for (let i = 0; i < 12; i++) {
+                const cellStart = currentCellStart + (i + 1) * msPerCell;
+                const cellEnd = cellStart + msPerCell;
+                const stepsToStart = Math.max(0, Math.round((cellStart - now) / 1000));
+                const stepsToEnd = Math.round((cellEnd - now) / 1000);
+                futureCells.push({
+                    timestamp: cellStart,
+                    activeFromStep: stepsToStart,  // Cell becomes active at this step
+                    activeToStep: stepsToEnd       // Cell expires at this step
+                });
+            }
+            
+            // Initialize hit tracking
+            const hitCounts = {};
+            for (const cellData of futureCells) {
+                for (const pLevel of priceLevels) {
+                    hitCounts[`${cellData.timestamp}_${pLevel}`] = 0;
+                }
+            }
+            
+            // Total steps to simulate (until last cell expires)
+            const maxSteps = futureCells[futureCells.length - 1].activeToStep;
+            
+            // Run simulation - track TOUCHES during each cell's ACTIVE window
+            for (let path = 0; path < NUM_PATHS; path++) {
+                let S = currentPrice;
+                
+                // Track which cells were touched in this path
+                const touchedThisPath = {};
+                for (const cellData of futureCells) {
+                    touchedThisPath[cellData.timestamp] = new Set();
+                }
+                
+                // Simulate entire path
+                for (let step = 1; step <= maxSteps; step++) {
+                    // Standard GBM component
+                    const drift = -0.5 * volPerStep * volPerStep;
+                    const shock = volPerStep * randomNormal();
+                    
+                    // Jump component (Merton jump-diffusion)
+                    let jumpComponent = 0;
+                    if (Math.random() < jumpProb) {
+                        jumpComponent = jumpMean + jumpVol * randomNormal();
+                    }
+                    
+                    // Combined price evolution
+                    S = S * Math.exp(drift + shock + jumpComponent);
+                    
+                    // Check which price level we're in
+                    const pLevel = Math.floor(S / pricePerCell) * pricePerCell;
+                    
+                    // Record touch for all cells that are ACTIVE at this step
+                    for (const cellData of futureCells) {
+                        if (step >= cellData.activeFromStep && step < cellData.activeToStep) {
+                            if (priceLevels.includes(pLevel)) {
+                                touchedThisPath[cellData.timestamp].add(pLevel);
+                            }
+                        }
+                    }
+                }
+                
+                // Count hits - each touched cell counts once per path
+                for (const cellData of futureCells) {
+                    for (const pLevel of touchedThisPath[cellData.timestamp]) {
+                        const key = `${cellData.timestamp}_${pLevel}`;
+                        if (hitCounts[key] !== undefined) {
+                            hitCounts[key]++;
+                        }
+                    }
+                }
+            }
+            
+            // Calculate multipliers
+            const newMultipliers = {};
+            for (const cellData of futureCells) {
+                for (const pLevel of priceLevels) {
+                    const key = `${cellData.timestamp}_${pLevel}`;
+                    const hits = hitCounts[key] || 0;
+                    const prob = hits / NUM_PATHS;
+                    
+                    newMultipliers[key] = {
+                        probability: prob,
+                        cellTs: cellData.timestamp,
+                        priceLevel: pLevel,
+                        simTime: now,
+                        simPrice: currentPrice
+                    };
+                }
+            }
+            
+            gridMultipliers = newMultipliers;
+            simulationRunning = false;
+            
+            // Debug: log probabilities for center price cells
+            const centerKey0 = `${futureCells[0].timestamp}_${centerPrice}`;
+            const centerKey1 = `${futureCells[1].timestamp}_${centerPrice}`;
+            const centerKey2 = `${futureCells[2].timestamp}_${centerPrice}`;
+            console.log('Cell probs at center price:', 
+                'Cell1:', (newMultipliers[centerKey0]?.probability * 100).toFixed(1) + '%',
+                'Cell2:', (newMultipliers[centerKey1]?.probability * 100).toFixed(1) + '%',
+                'Cell3:', (newMultipliers[centerKey2]?.probability * 100).toFixed(1) + '%',
+                '| Vol:', (vol * 100).toFixed(0) + '%'
+            );
+        }
+
+        // Get multiplier color
+        function getMultiplierColor(mult, opacity) {
+            if (mult < 2) return `rgba(0, 255, 136, ${opacity})`;
+            if (mult < 5) return `rgba(150, 255, 100, ${opacity})`;
+            if (mult < 10) return `rgba(255, 255, 0, ${opacity})`;
+            if (mult < 25) return `rgba(255, 180, 0, ${opacity})`;
+            if (mult < 50) return `rgba(255, 100, 50, ${opacity})`;
+            if (mult < 100) return `rgba(255, 50, 80, ${opacity})`;
+            return `rgba(255, 0, 100, ${opacity})`;
+        }
+
+        // Adjust multiplier for time decay AND price movement (O(1) - minimal CPU)
+        function getAdjustedMultiplier(data, currentNow, currentPrice) {
+            const originalSecs = (data.cellTs - data.simTime) / 1000;
+            const currentSecs = Math.max(0.1, (data.cellTs - currentNow) / 1000);
+            
+            // Time factor: less time = higher prob (sqrt scaling from diffusion)
+            const timeFactor = Math.sqrt(originalSecs / currentSecs);
+            
+            // Movement factor: price movement REDUCES multipliers (favors house)
+            // This prevents exploitation of stale multipliers after price moves
+            const pricePerCell = 10;
+            const priceMoved = Math.abs(currentPrice - data.simPrice);
+            const movementFactor = Math.max(0.5, 1 - (priceMoved / pricePerCell) * 0.1);
+            
+            // Combined adjustment (capped to avoid extremes)
+            const adjustment = Math.min(10, timeFactor * movementFactor);
+            const adjustedProb = Math.min(0.95, data.probability * adjustment);
+            
+            // Dynamic house edge: pay (1 - houseEdge) / prob instead of fair 1 / prob
+            return Math.min(100, Math.max(1.01, (1 - houseEdge) / adjustedProb));
+        }
+
+        // Format multiplier
+        function formatMultiplier(m) {
+            if (m >= 100) return '99+';
+            if (m >= 10) return m.toFixed(1) + 'x';
+            return m.toFixed(2) + 'x';
+        }
+
+        // Update price display
+        function updatePriceDisplay() {
+            if (!price) return;
+            currentPriceEl.textContent = '$' + formatPrice(price);
+            
+            if (prevPrice !== null) {
+                currentPriceEl.className = 'price-value ' + (price > prevPrice ? 'up' : price < prevPrice ? 'down' : '');
+                setTimeout(() => currentPriceEl.className = 'price-value', 150);
+            }
+            
+            if (startPrice) {
+                const change = ((price - startPrice) / startPrice) * 100;
+                const changeAbs = price - startPrice;
+                priceChangeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                priceChangeEl.className = `change-badge ${change >= 0 ? 'positive' : 'negative'}`;
+                priceChangeAbsEl.textContent = `$${changeAbs >= 0 ? '+' : ''}${formatPrice(changeAbs)}`;
+            }
+            
+            volatilityEl.textContent = (estimatedVolatility * 100).toFixed(0) + '%';
+            
+            // Update jump intensity display
+            const jumpPct = (estimatedJumpParams.jumpProb * 100).toFixed(1);
+            const jumpMag = (estimatedJumpParams.jumpVol * 100).toFixed(2);
+            jumpIntensityEl.textContent = jumpPct + '%';
+            
+            const jumpStat = document.getElementById('jumpStat');
+            if (jumpStat) {
+                jumpStat.title = `Jump Prob: ${jumpPct}%/sec | Magnitude: ±${jumpMag}% | Mean: ${(estimatedJumpParams.jumpMean * 100).toFixed(3)}%`;
+            }
+            
+            // Color based on intensity: green (low) -> yellow -> red (high)
+            if (estimatedJumpParams.jumpProb < 0.005) {
+                jumpIntensityEl.style.color = '#00ff88'; // Low jumps
+            } else if (estimatedJumpParams.jumpProb < 0.015) {
+                jumpIntensityEl.style.color = '#ffaa00'; // Medium jumps
+            } else {
+                jumpIntensityEl.style.color = '#ff4444'; // High jumps
+            }
+        }
+
+        // Resize canvas
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+        }
+
+        // Draw chart
+        function drawChart() {
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+            const padding = {top: 30, right: 20, bottom: 55, left: 80};
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+
+            // Clear
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(0, 0, width, height);
+
+            // Grid config
+            const pricePerCell = 10; // $10 per cell
+            const msPerCell = 10000; // 10 seconds per cell
+            const now = Date.now();
+            
+            // Time range: 30s past to 2 min future (shows all simulated cells)
+            const pastRange = 30000;   // 30 seconds past
+            const futureRange = 120000; // 2 minutes future (12 cells × 10s)
+            const timeStart = now - pastRange;
+            const timeEnd = now + futureRange;
+            
+            // Price range centered on smoothed price - show all 11 price levels
+            const centerPrice = displayPrice || price || 97000;
+            const totalPriceRange = 120; // $120 total (12 cells × $10, extra buffer)
+            const minPrice = centerPrice - totalPriceRange / 2;
+            const maxPrice = centerPrice + totalPriceRange / 2;
+
+            // Conversion functions
+            const timeToX = (t) => padding.left + ((t - timeStart) / (timeEnd - timeStart)) * chartWidth;
+            const priceToY = (p) => padding.top + ((maxPrice - p) / (maxPrice - minPrice)) * chartHeight;
+            const nowX = timeToX(now);  // NOW line position
+            const centerY = padding.top + chartHeight / 2;
+
+            // Draw background gradients
+            const bgGrad = ctx.createRadialGradient(nowX, centerY, 0, nowX, centerY, chartWidth/2);
+            bgGrad.addColorStop(0, 'rgba(0, 40, 50, 0.3)');
+            bgGrad.addColorStop(1, 'rgba(0, 15, 20, 0.1)');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(padding.left, padding.top, chartWidth, chartHeight);
+
+            // Find grid line positions
+            const firstCellMark = Math.floor(timeStart / msPerCell) * msPerCell;
+            const firstPriceMark = Math.floor(minPrice / pricePerCell) * pricePerCell;
+
+            // Draw grid lines with opacity based on distance from center
+            for (let t = firstCellMark; t <= timeEnd + msPerCell; t += msPerCell) {
+                const x = timeToX(t);
+                if (x < padding.left || x > padding.left + chartWidth) continue;
+                
+                const distFromCenter = Math.abs(x - nowX) / (chartWidth / 2);
+                const opacity = 0.06 + (1 - distFromCenter) * 0.15;
+                const isFuture = t >= now;
+                
+                ctx.strokeStyle = isFuture ? `rgba(255, 200, 0, ${opacity})` : `rgba(0, 212, 255, ${opacity})`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, padding.top);
+                ctx.lineTo(x, padding.top + chartHeight);
+                ctx.stroke();
+            }
+
+            for (let p = firstPriceMark; p <= maxPrice + pricePerCell; p += pricePerCell) {
+                const y = priceToY(p);
+                if (y < padding.top || y > padding.top + chartHeight) continue;
+                
+                const distFromCenter = Math.abs(y - centerY) / (chartHeight / 2);
+                const opacity = 0.06 + (1 - distFromCenter) * 0.15;
+                
+                ctx.strokeStyle = `rgba(0, 212, 255, ${opacity})`;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(padding.left + chartWidth, y);
+                ctx.stroke();
+            }
+
+            // Draw NOW line
+            ctx.strokeStyle = '#ffc800';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(nowX, padding.top);
+            ctx.lineTo(nowX, padding.top + chartHeight);
+            ctx.stroke();
+
+            // NOW label
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fillRect(nowX - 20, padding.top - 18, 40, 14);
+            ctx.fillStyle = '#ffc800';
+            ctx.font = 'bold 10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('NOW', nowX, padding.top - 7);
+
+            // Center price line
+            ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, centerY);
+            ctx.lineTo(padding.left + chartWidth, centerY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Y-axis labels
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'right';
+            for (let p = firstPriceMark; p <= maxPrice + pricePerCell; p += pricePerCell) {
+                const y = priceToY(p);
+                if (y < padding.top - 5 || y > padding.top + chartHeight + 5) continue;
+                const distFromCenter = Math.abs(p - centerPrice) / (totalPriceRange / 2);
+                ctx.fillStyle = `rgba(136, 136, 170, ${0.4 + (1 - Math.min(distFromCenter, 1)) * 0.6})`;
+                ctx.fillText('$' + formatPrice(p), padding.left - 8, y + 3);
+            }
+
+            // X-axis labels (show seconds for 15-second cells)
+            ctx.font = '9px monospace';
+            ctx.textAlign = 'center';
+            for (let t = firstCellMark; t <= timeEnd + msPerCell; t += msPerCell) {
+                const x = timeToX(t);
+                if (x < padding.left - 15 || x > padding.left + chartWidth + 15) continue;
+                const distFromNow = Math.abs(t - now) / futureRange;
+                const opacity = 0.4 + (1 - Math.min(distFromNow, 1)) * 0.6;
+                ctx.fillStyle = t >= now ? `rgba(255, 200, 0, ${opacity})` : `rgba(0, 212, 255, ${opacity})`;
+                
+                // Format as MM:SS
+                const date = new Date(t);
+                const label = date.getMinutes().toString().padStart(2, '0') + ':' + 
+                             date.getSeconds().toString().padStart(2, '0');
+                ctx.fillText(label, x, padding.top + chartHeight + 15);
+            }
+
+            // Section labels
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillStyle = '#00d4ff';
+            ctx.fillText('◀ PAST', padding.left + 40, padding.top + chartHeight + 38);
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.8)';
+            ctx.fillText('NEXT 2 MIN ▶', padding.left + chartWidth * 0.6, padding.top + chartHeight + 38);
+
+            // Draw price line (RAW real-time data - no smoothing)
+            const recentHistory = priceHistory.filter(d => d.time >= timeStart && d.time <= now);
+            
+            if (recentHistory.length > 1) {
+                // Gradient fill
+                const grad = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
+                grad.addColorStop(0, 'rgba(0, 212, 255, 0.35)');
+                grad.addColorStop(0.5, 'rgba(0, 212, 255, 0.15)');
+                grad.addColorStop(1, 'rgba(0, 212, 255, 0)');
+
+                // Draw fill area
+                ctx.beginPath();
+                ctx.moveTo(timeToX(recentHistory[0].time), padding.top + chartHeight);
+                
+                for (let i = 0; i < recentHistory.length; i++) {
+                    const pt = recentHistory[i];
+                    ctx.lineTo(timeToX(pt.time), priceToY(pt.price));
+                }
+                
+                ctx.lineTo(timeToX(recentHistory[recentHistory.length - 1].time), padding.top + chartHeight);
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Draw line
+                ctx.beginPath();
+                ctx.strokeStyle = '#00d4ff';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                for (let i = 0; i < recentHistory.length; i++) {
+                    const pt = recentHistory[i];
+                    const x = timeToX(pt.time);
+                    const y = priceToY(pt.price);
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+            
+            // Current price dot with smooth pulse
+            if (price) {
+                const pulse = Math.sin(Date.now() / 300) * 0.15 + 1;
+                const glowPulse = Math.sin(Date.now() / 500) * 0.1 + 0.2;
+                
+                // Outer glow
+                ctx.beginPath();
+                ctx.arc(nowX, centerY, 16 * pulse, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 200, 0, ${glowPulse})`;
+                ctx.fill();
+                
+                // Middle ring
+                ctx.beginPath();
+                ctx.arc(nowX, centerY, 10, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffc800';
+                ctx.fill();
+                
+                // Center dot
+                ctx.beginPath();
+                ctx.arc(nowX, centerY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+            }
+
+            // Draw multipliers in FUTURE cells only (they move with grid)
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Store chart params for click detection
+            window.chartParams = {
+                padding, chartWidth, chartHeight, timeStart, timeEnd, minPrice, maxPrice,
+                pricePerCell, msPerCell, now, timeToX, priceToY, nowX, centerY
+            };
+            
+            for (const key in gridMultipliers) {
+                const data = gridMultipliers[key];
+                const cellTs = data.cellTs;
+                const pLevel = data.priceLevel;
+                
+                // Skip if this cell is locked (will draw separately)
+                if (lockedBoxes[key]) continue;
+                
+                // Skip if this cell has passed
+                if (cellTs <= now) continue;
+                
+                // Cell boundaries - cells are aligned to 15-second boundaries
+                const cellStartX = timeToX(cellTs);
+                const cellEndX = timeToX(cellTs + msPerCell);
+                const cellTopY = priceToY(pLevel + pricePerCell);
+                const cellBottomY = priceToY(pLevel);
+                
+                const cellCenterX = (cellStartX + cellEndX) / 2;
+                const cellCenterY = (cellTopY + cellBottomY) / 2;
+                
+                // Skip if completely outside visible area
+                if (cellEndX < padding.left || cellStartX > padding.left + chartWidth) continue;
+                if (cellBottomY < padding.top || cellTopY > padding.top + chartHeight) continue;
+                
+                const mult = getAdjustedMultiplier(data, now, price);
+                const prob = data.probability;
+                
+                // Calculate time until this cell starts
+                const timeUntilStart = cellTs - now;
+                const isClosingSoon = timeUntilStart < 10000; // Less than 10 seconds (one cell)
+                
+                // Calculate fade factor: 1.0 at 10s, 0.0 at 0s (smooth easing)
+                const rawFade = isClosingSoon ? Math.max(0, timeUntilStart / 10000) : 1.0;
+                const fadeFactor = easeInOutQuad(rawFade);
+                
+                // Check if this cell is hovered
+                const isHovered = hoveredCell === key;
+                const isDragSelected = dragSelectedCells.has(key);
+                const isPatternCell = patternCells.has(key) && autoBetPattern !== 'threshold';
+                const hoverBoost = (isHovered || isDragSelected || isPatternCell) ? 0.3 : 0;
+                
+                // Opacity based on distance from center (NOW line and current price)
+                const distX = Math.abs(cellCenterX - nowX) / (chartWidth / 2);
+                const distY = Math.abs(cellCenterY - centerY) / (chartHeight / 2);
+                const dist = Math.sqrt(distX * distX + distY * distY) / Math.sqrt(2);
+                const baseOpacity = (0.3 + (1 - dist) * 0.7 + hoverBoost) * fadeFactor;
+                
+                // Calculate clipped cell boundaries
+                const clippedStartX = Math.max(cellStartX, padding.left);
+                const clippedEndX = Math.min(cellEndX, padding.left + chartWidth);
+                const clippedTopY = Math.max(cellTopY, padding.top);
+                const clippedBottomY = Math.min(cellBottomY, padding.top + chartHeight);
+                
+                const cellW = clippedEndX - clippedStartX;
+                const cellH = clippedBottomY - clippedTopY;
+                
+                // Cell background - gray out if closing soon, highlight if drag selected or pattern
+                if (cellW > 0 && cellH > 0) {
+                    if (isDragSelected && !isClosingSoon) {
+                        // Drag selection preview - cyan/blue highlight
+                        ctx.fillStyle = `rgba(0, 200, 255, ${baseOpacity * 0.4})`;
+                    } else if (isPatternCell && !isClosingSoon) {
+                        // Pattern cell preview - orange highlight
+                        ctx.fillStyle = `rgba(255, 136, 0, ${baseOpacity * 0.35})`;
+                    } else if (isClosingSoon) {
+                        // Smooth blend to gray
+                        const grayAmount = 1 - fadeFactor;
+                        ctx.fillStyle = `rgba(80, 80, 90, ${baseOpacity * 0.3 + grayAmount * 0.15})`;
+                    } else {
+                        ctx.fillStyle = getMultiplierColor(mult, baseOpacity * 0.3);
+                    }
+                    ctx.fillRect(clippedStartX, clippedTopY, cellW, cellH);
+                    
+                    // Draw drag selection border (pulsing cyan)
+                    if (isDragSelected && !isClosingSoon) {
+                        const pulse = Math.sin(Date.now() / 150) * 0.2 + 0.8;
+                        ctx.strokeStyle = `rgba(0, 220, 255, ${pulse})`;
+                        ctx.lineWidth = 3;
+                        ctx.setLineDash([5, 3]);
+                        ctx.strokeRect(clippedStartX + 1.5, clippedTopY + 1.5, cellW - 3, cellH - 3);
+                        ctx.setLineDash([]);
+                    }
+                    // Draw pattern cell border (pulsing orange)
+                    else if (isPatternCell && !isClosingSoon) {
+                        const pulse = Math.sin(Date.now() / 200) * 0.2 + 0.8;
+                        ctx.strokeStyle = `rgba(255, 136, 0, ${pulse})`;
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([4, 2]);
+                        ctx.strokeRect(clippedStartX + 1, clippedTopY + 1, cellW - 2, cellH - 2);
+                        ctx.setLineDash([]);
+                    }
+                    // Draw hover highlight (if not drag selected or pattern)
+                    else if (isHovered && !isClosingSoon) {
+                        ctx.strokeStyle = getMultiplierColor(mult, 0.6);
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(clippedStartX + 1, clippedTopY + 1, cellW - 2, cellH - 2);
+                    }
+                }
+                
+                // Only draw text if center is visible
+                if (cellCenterX >= padding.left && cellCenterX <= padding.left + chartWidth &&
+                    cellCenterY >= padding.top && cellCenterY <= padding.top + chartHeight) {
+                    
+                    if (isClosingSoon) {
+                        // Gray out text for closing cells
+                        ctx.font = mult >= 20 ? 'bold 14px monospace' : mult >= 5 ? 'bold 13px monospace' : '12px monospace';
+                        ctx.fillStyle = `rgba(100, 100, 110, ${baseOpacity + 0.2})`;
+                        ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 4);
+                        
+                        // Show countdown
+                        ctx.font = '9px monospace';
+                        ctx.fillStyle = `rgba(150, 150, 160, ${baseOpacity + 0.3})`;
+                        const secsLeft = Math.ceil(timeUntilStart / 1000);
+                        ctx.fillText(`${secsLeft}s`, cellCenterX, cellCenterY + 12);
+                    } else if (isDragSelected) {
+                        // Drag selected - show multiplier and PENDING status
+                        const fontSize = mult >= 20 ? 14 : mult >= 5 ? 13 : 12;
+                        ctx.font = `bold ${fontSize}px monospace`;
+                        ctx.fillStyle = `rgba(0, 220, 255, ${baseOpacity + 0.4})`;
+                        ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 7);
+                        
+                        // Show bet amount
+                        ctx.font = '10px monospace';
+                        ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity + 0.3})`;
+                        ctx.fillText('$' + betSize, cellCenterX, cellCenterY + 6);
+                        
+                        // Show PENDING label
+                        ctx.font = 'bold 8px monospace';
+                        ctx.fillStyle = `rgba(0, 220, 255, ${baseOpacity + 0.5})`;
+                        ctx.fillText('PENDING', cellCenterX, cellCenterY + 17);
+                    } else {
+                        // Normal rendering with hover effect
+                        const fontSize = isHovered ? 15 : (mult >= 20 ? 14 : mult >= 5 ? 13 : 12);
+                        ctx.font = `bold ${fontSize}px monospace`;
+                        ctx.fillStyle = getMultiplierColor(mult, baseOpacity + hoverBoost);
+                        ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 4);
+                        
+                        // Probability text
+                        if (prob >= 0.005) {
+                            ctx.font = '10px monospace';
+                            ctx.fillStyle = `rgba(200, 200, 220, ${(baseOpacity + hoverBoost) * 0.7})`;
+                            ctx.fillText((prob * 100).toFixed(1) + '%', cellCenterX, cellCenterY + 10);
+                        }
+                    }
+                }
+            }
+            
+            // Draw LOCKED boxes with animations
+            const currentTime = Date.now();
+            
+            for (const key in lockedBoxes) {
+                const box = lockedBoxes[key];
+                const cellTs = box.cellTs;
+                const pLevel = box.priceLevel;
+                
+                // Cell boundaries
+                const cellStartX = timeToX(cellTs);
+                const cellEndX = timeToX(cellTs + msPerCell);
+                const cellTopY = priceToY(pLevel + pricePerCell);
+                const cellBottomY = priceToY(pLevel);
+                
+                const cellCenterX = (cellStartX + cellEndX) / 2;
+                const cellCenterY = (cellTopY + cellBottomY) / 2;
+                
+                // Skip if completely outside visible area
+                if (cellEndX < padding.left - 50 || cellStartX > padding.left + chartWidth + 50) continue;
+                if (cellBottomY < padding.top - 20 || cellTopY > padding.top + chartHeight + 20) continue;
+                
+                // Calculate clipped cell boundaries
+                let clippedStartX = Math.max(cellStartX, padding.left);
+                let clippedEndX = Math.min(cellEndX, padding.left + chartWidth);
+                let clippedTopY = Math.max(cellTopY, padding.top);
+                let clippedBottomY = Math.min(cellBottomY, padding.top + chartHeight);
+                
+                let cellW = clippedEndX - clippedStartX;
+                let cellH = clippedBottomY - clippedTopY;
+                
+                if (cellW <= 0 || cellH <= 0) continue;
+                
+                // Animation calculations
+                const timeSinceLock = currentTime - box.lockedAt;
+                const timeSinceTouch = box.touchedAt ? currentTime - box.touchedAt : 0;
+                
+                // Lock animation (elastic pop effect) - 500ms duration
+                let lockScale = 1;
+                let lockGlow = 0;
+                if (timeSinceLock < 500) {
+                    const t = timeSinceLock / 500;
+                    lockScale = 0.8 + 0.2 * easeOutElastic(t);
+                    lockGlow = (1 - t) * 0.5;
+                }
+                
+                // Win animation (pulse glow effect) - continuous
+                let winGlow = 0;
+                let winPulse = 1;
+                if (box.touched) {
+                    if (timeSinceTouch < 1000) {
+                        // Initial celebration burst
+                        const t = timeSinceTouch / 1000;
+                        winGlow = (1 - easeOutCubic(t)) * 0.8;
+                        winPulse = 1 + (1 - t) * 0.15;
+                    }
+                    // Continuous subtle pulse
+                    winGlow += 0.1 + 0.1 * Math.sin(currentTime / 200);
+                }
+                
+                // Apply scale animation
+                const scale = lockScale * winPulse;
+                if (scale !== 1) {
+                    const scaledW = cellW * scale;
+                    const scaledH = cellH * scale;
+                    clippedStartX = cellCenterX - scaledW / 2;
+                    clippedTopY = cellCenterY - scaledH / 2;
+                    cellW = scaledW;
+                    cellH = scaledH;
+                }
+                
+                // Determine box color based on state with smooth transitions
+                let bgColor, borderColor, textColor, statusText;
+                let glowColor = null;
+                
+                // Resolved bets (won/lost) have reduced opacity (65% of original)
+                const resolvedFade = 0.65;
+                
+                if (box.touched) {
+                    // WIN - Green with glow (faded)
+                    const baseAlpha = (0.3 + winGlow * 0.3) * resolvedFade;
+                    bgColor = `rgba(0, 255, 100, ${baseAlpha})`;
+                    borderColor = `rgba(0, 255, 100, 0.4)`;
+                    textColor = `rgba(0, 255, 136, ${resolvedFade})`;
+                    statusText = 'WIN!';
+                    glowColor = `rgba(0, 255, 100, ${winGlow * resolvedFade})`;
+                } else if (box.expired) {
+                    // LOSS - Red (faded)
+                    bgColor = `rgba(255, 50, 50, ${0.3 * resolvedFade})`;
+                    borderColor = `rgba(255, 50, 50, 0.4)`;
+                    textColor = `rgba(255, 68, 68, ${resolvedFade})`;
+                    statusText = 'LOSS';
+                } else {
+                    // Active locked box - Yellow/Gold with lock glow (full opacity)
+                    const baseAlpha = 0.3 + lockGlow * 0.2;
+                    bgColor = `rgba(255, 200, 0, ${baseAlpha})`;
+                    borderColor = `rgba(255, 200, 0, ${0.9 + lockGlow * 0.1})`;
+                    textColor = '#ffc800';
+                    statusText = 'LOCKED';
+                    if (lockGlow > 0) {
+                        glowColor = `rgba(255, 200, 0, ${lockGlow})`;
+                    }
+                }
+                
+                // Draw glow effect
+                if (glowColor) {
+                    ctx.save();
+                    ctx.shadowColor = glowColor;
+                    ctx.shadowBlur = 20 + (winGlow + lockGlow) * 20;
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(clippedStartX, clippedTopY, cellW, cellH);
+                    ctx.restore();
+                }
+                
+                // Draw cell background
+                ctx.fillStyle = bgColor;
+                ctx.fillRect(clippedStartX, clippedTopY, cellW, cellH);
+                
+                // Draw border with variable thickness based on animation
+                const borderWidth = 2 + (lockGlow + winGlow) * 2;
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = borderWidth;
+                ctx.strokeRect(clippedStartX + borderWidth/2, clippedTopY + borderWidth/2, 
+                               cellW - borderWidth, cellH - borderWidth);
+                
+                // Draw locked multiplier text
+                if (cellCenterX >= padding.left - 20 && cellCenterX <= padding.left + chartWidth + 20 &&
+                    cellCenterY >= padding.top - 20 && cellCenterY <= padding.top + chartHeight + 20) {
+                    
+                    // Scale text size with animation
+                    const fontSize = Math.round(11 * scale);
+                    ctx.font = `bold ${fontSize}px monospace`;
+                    ctx.fillStyle = textColor;
+                    ctx.fillText(formatMultiplier(box.multiplier), cellCenterX, cellCenterY - 8 * scale);
+                    
+                    // Show bet amount (faded for resolved bets)
+                    const betFontSize = Math.round(9 * scale);
+                    ctx.font = `${betFontSize}px monospace`;
+                    const isResolved = box.touched || box.expired;
+                    const betTextAlpha = isResolved ? 0.65 : 1;
+                    ctx.fillStyle = box.touched ? `rgba(0, 255, 136, ${betTextAlpha})` : box.expired ? `rgba(255, 68, 68, ${betTextAlpha})` : '#fff';
+                    const betText = box.touched ? '+$' + (box.payout || box.betAmount * box.multiplier).toFixed(0) : '$' + box.betAmount;
+                    ctx.fillText(betText, cellCenterX, cellCenterY + 4 * scale);
+                    
+                    // Show status with animation
+                    const statusFontSize = Math.round(7 * scale);
+                    ctx.font = `bold ${statusFontSize}px monospace`;
+                    ctx.fillStyle = textColor;
+                    ctx.fillText(statusText, cellCenterX, cellCenterY + 14 * scale);
+                }
+                
+                // Draw win particles (faded)
+                if (box.touched && timeSinceTouch < 1500) {
+                    drawWinParticles(ctx, cellCenterX, cellCenterY, timeSinceTouch, cellW, cellH, 0.65);
+                }
+            }
+            
+            // Draw drag selection HUD overlay
+            if (isDragging && dragSelectedCells.size > 0) {
+                const validCells = Array.from(dragSelectedCells).filter(key => 
+                    !lockedBoxes[key] && gridMultipliers[key]
+                );
+                const cellCount = validCells.length;
+                const totalCost = cellCount * betSize;
+                const canAfford = totalCost <= balance;
+                
+                // Calculate average multiplier
+                let totalMult = 0;
+                for (const key of validCells) {
+                    const data = gridMultipliers[key];
+                    if (data) {
+                        totalMult += getAdjustedMultiplier(data, now, price);
+                    }
+                }
+                const avgMult = cellCount > 0 ? totalMult / cellCount : 0;
+                
+                // Draw HUD box in top-right corner
+                const hudX = padding.left + chartWidth - 180;
+                const hudY = padding.top + 10;
+                const hudW = 170;
+                const hudH = 75;
+                
+                // Background with glow
+                ctx.save();
+                ctx.shadowColor = canAfford ? 'rgba(0, 220, 255, 0.5)' : 'rgba(255, 68, 68, 0.5)';
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = 'rgba(10, 15, 25, 0.9)';
+                ctx.strokeStyle = canAfford ? 'rgba(0, 220, 255, 0.8)' : 'rgba(255, 68, 68, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(hudX, hudY, hudW, hudH, 8);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                
+                // Title
+                ctx.font = 'bold 10px monospace';
+                ctx.fillStyle = canAfford ? '#00dcff' : '#ff4444';
+                ctx.textAlign = 'center';
+                ctx.fillText('DRAG SELECTION', hudX + hudW/2, hudY + 15);
+                
+                // Stats
+                ctx.font = '11px monospace';
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#fff';
+                ctx.fillText(`Cells: ${cellCount}`, hudX + 12, hudY + 32);
+                ctx.fillText(`Avg: ${avgMult.toFixed(2)}x`, hudX + 90, hudY + 32);
+                
+                // Total cost
+                ctx.font = 'bold 14px monospace';
+                ctx.fillStyle = canAfford ? '#00ff88' : '#ff4444';
+                ctx.fillText(`Total: $${totalCost.toLocaleString()}`, hudX + 12, hudY + 52);
+                
+                // Warning if can't afford
+                if (!canAfford) {
+                    ctx.font = 'bold 9px monospace';
+                    ctx.fillStyle = '#ff4444';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('INSUFFICIENT BALANCE', hudX + hudW/2, hudY + 68);
+                } else {
+                    ctx.font = '9px monospace';
+                    ctx.fillStyle = '#8888aa';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Release to confirm • Right-click cancel', hudX + hudW/2, hudY + 68);
+                }
+            }
+        }
+        
+        // Draw celebration particles for win
+        function drawWinParticles(ctx, cx, cy, elapsed, cellW, cellH, fade = 1) {
+            const numParticles = 8;
+            const maxRadius = Math.max(cellW, cellH) * 0.8;
+            
+            for (let i = 0; i < numParticles; i++) {
+                const angle = (i / numParticles) * Math.PI * 2 + elapsed / 500;
+                const progress = Math.min(1, elapsed / 1000);
+                const distance = easeOutCubic(progress) * maxRadius;
+                const alpha = (1 - easeOutCubic(progress)) * fade;
+                const size = 3 * (1 - progress * 0.5);
+                
+                const x = cx + Math.cos(angle) * distance;
+                const y = cy + Math.sin(angle) * distance;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 255, 100, ${alpha})`;
+                ctx.fill();
+            }
+        
+
+            ctx.textBaseline = 'alphabetic';
+        }
+
+        // Animation loop - 45fps for smooth UI animations
+        let lastFrameTime = 0;
+        const targetFrameInterval = 22; // ~45fps
+        let lastPatternUpdate = 0;
+        
+        function animate(currentTime) {
+            if (currentTime - lastFrameTime >= targetFrameInterval) {
+                lastFrameTime = currentTime;
+                
+                // Update smooth grid centering with spring physics
+                if (price !== null) {
+                    if (displayPrice === null) {
+                        displayPrice = price;
+                    } else {
+                        const diff = price - displayPrice;
+                        priceVelocity += diff * priceSmoothingFactor;
+                        priceVelocity *= 0.6; // Lower damping = faster catch-up
+                        displayPrice += priceVelocity;
+                        
+                        if (Math.abs(diff) < 0.01 && Math.abs(priceVelocity) < 0.01) {
+                            displayPrice = price;
+                            priceVelocity = 0;
+                        }
+                    }
+                }
+                
+                // Update pattern cells every 500ms (not every frame)
+                if (currentTime - lastPatternUpdate > 500) {
+                    lastPatternUpdate = currentTime;
+                    updatePatternCells();
+                }
+                
+                drawChart();
+                currentTimeEl.textContent = formatTime(Date.now());
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // Fetch 24h stats
+        async function fetch24hStats() {
+            try {
+                const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT');
+                const data = await res.json();
+                high24hEl.textContent = '$' + formatPrice(data.highPrice);
+                low24hEl.textContent = '$' + formatPrice(data.lowPrice);
+                volume24hEl.textContent = formatVolume(data.volume) + ' BTC';
+                
+                const lastPrice = parseFloat(data.lastPrice);
+                if (!startPrice) startPrice = parseFloat(data.openPrice);
+                if (!price) price = lastPrice;
+                if (!displayPrice) displayPrice = lastPrice;
+            } catch (e) {
+                console.error('Stats fetch failed:', e);
+            }
+        }
+
+        // WebSocket
+        function connectWebSocket() {
+            ws = new WebSocket('wss://fstream.binance.com/ws/btcusdt@aggTrade');
+            
+            ws.onopen = () => {
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Live';
+                console.log('Connected to Binance Futures');
+            };
+            
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                const newPrice = parseFloat(data.p);
+                
+                // Skip invalid data
+                if (!newPrice || isNaN(newPrice) || newPrice <= 0) {
+                    console.log('Invalid price data:', data);
+                    return;
+                }
+                
+                prevPrice = price;
+                price = newPrice;
+                if (!startPrice) startPrice = newPrice;
+                
+                // Initialize displayPrice immediately on first data
+                if (displayPrice === null) displayPrice = newPrice;
+                
+                // Use local time to avoid sync issues with exchange time
+                const localTime = Date.now();
+                priceHistory.push({time: localTime, price: newPrice});
+                
+                // Keep 15 min of data for volatility calculation
+                const cutoff = Date.now() - 15 * 60 * 1000;
+                priceHistory = priceHistory.filter(d => d.time >= cutoff);
+                
+                tradeCount++;
+                tradeCountEl.textContent = tradeCount.toLocaleString();
+                updatePriceDisplay();
+                
+                // Check if price touches any locked boxes (use local time)
+                checkLockedBoxTouches(newPrice, localTime);
+            };
+            
+            ws.onerror = () => {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Error';
+            };
+            
+            ws.onclose = () => {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Reconnecting...';
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+        
+        // Check if current price touches any locked boxes
+        function checkLockedBoxTouches(currentPrice, currentTime) {
+            const pricePerCell = 10; // $10 per cell
+            const msPerCell = 10000; // 10 seconds per cell
+            
+            for (const key in lockedBoxes) {
+                const box = lockedBoxes[key];
+                
+                // Skip already touched or expired boxes
+                if (box.touched || box.expired) continue;
+                
+                // Check if we're within this box's time window
+                const boxStart = box.cellTs;
+                const boxEnd = boxStart + msPerCell;
+                
+                if (currentTime >= boxStart && currentTime < boxEnd) {
+                    // Check if price falls within this box's $10 price range
+                    // Box covers: [priceLevel, priceLevel + pricePerCell)
+                    if (currentPrice >= box.priceLevel && currentPrice < box.priceLevel + pricePerCell) {
+                        box.touched = true;
+                        box.touchedAt = Date.now(); // Record when touched for animation
+                        
+                        // Calculate and add payout, resolve pending bet
+                        const payout = box.betAmount * box.multiplier;
+                        balance += payout;
+                        pendingBets -= box.betAmount;
+                        totalWins++;
+                        box.payout = payout;
+                        updateBalanceDisplay();
+                        
+                        playCashRegisterSound(); // Cha-ching!
+                        console.log('WIN!', key, 'Bet: $' + box.betAmount, 'Payout: $' + payout.toFixed(2));
+                    }
+                }
+            }
+        }
+        
+        // Update expired status for locked boxes and handle losses
+        // Small buffer (200ms) ensures last-second wins are caught by price ticks first
+        function updateLockedBoxExpiry() {
+            const now = Date.now();
+            const msPerCell = 10000; // 10 seconds per cell
+            const expiryBuffer = 200; // 200ms grace period
+            
+            for (const key in lockedBoxes) {
+                const box = lockedBoxes[key];
+                const cellTs = box.cellTs;
+                
+                // Check if box should expire (with buffer)
+                if (!box.expired && now >= cellTs + msPerCell + expiryBuffer) {
+                    box.expired = true;
+                    
+                    // If not touched, it's a loss - resolve pending bet
+                    if (!box.touched) {
+                        pendingBets -= box.betAmount;
+                        totalLosses++;
+                        updateBalanceDisplay();
+                        playLossSound();
+                        console.log('LOSS (expiry)!', key, 'Lost: $' + box.betAmount);
+                    }
+                }
+            }
+        }
+
+        // Simulation scheduler - runs every second for fast 10-second cells
+        function scheduleSimulation() {
+            if (!price) return;
+            
+            const now = Date.now();
+            const timeSinceLastSim = now - lastSimTime;
+            
+            // Run simulation every 1 second for responsive 15-second cells
+            if (timeSinceLastSim >= 1000 && !simulationRunning) {
+                lastSimTime = now;
+                // Clean old multipliers (anything in the past)
+                for (const key in gridMultipliers) {
+                    if (gridMultipliers[key].cellTs <= now) {
+                        delete gridMultipliers[key];
+                    }
+                }
+                setTimeout(runMonteCarloSimulation, 0);
+            }
+        }
+
+        // Initialize
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        initTradingUI();
+        fetch24hStats();
+        setInterval(fetch24hStats, 60000);
+        connectWebSocket();
+        requestAnimationFrame(animate);
+        
+        // Run simulation check every 300ms (simulation itself runs every 1s)
+        setInterval(scheduleSimulation, 300);
+        setTimeout(() => { if (price) runMonteCarloSimulation(); }, 500);
+        
+        // Update locked box expiry every 100ms for fast 15-second cells
+        setInterval(updateLockedBoxExpiry, 100);
+        
+        // Run auto-bet check every 500ms
+        setInterval(runAutoBet, 500);
+        
+        // Clean up old auto-bet locked entries every 5 seconds
+        setInterval(cleanAutoBetLocked, 5000);
+        
+        // Mouse down - start drag selection
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // Left click only
+            if (!window.chartParams) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const cellData = getCellKeyFromPosition(x, y);
+            
+            if (cellData && !lockedBoxes[cellData.key] && gridMultipliers[cellData.key]) {
+                isDragging = true;
+                dragSelectedCells.clear();
+                dragSelectedCells.add(cellData.key);
+                canvas.style.cursor = 'crosshair';
+                
+                // Play a subtle sound on drag start
+                playClickSound();
+            }
+        });
+        
+        // Mouse move - track hover and add cells during drag
+        canvas.addEventListener('mousemove', (e) => {
+            if (!window.chartParams) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const cellData = getCellKeyFromPosition(x, y);
+            
+            // During drag - add cells to selection
+            if (isDragging) {
+                if (cellData && !lockedBoxes[cellData.key] && gridMultipliers[cellData.key]) {
+                    // Check if this is a new cell
+                    if (!dragSelectedCells.has(cellData.key)) {
+                        dragSelectedCells.add(cellData.key);
+                        // Optional: play subtle tick sound for each new cell
+                    }
+                    hoveredCell = cellData.key;
+                }
+                canvas.style.cursor = 'crosshair';
+                return;
+            }
+            
+            // Normal hover behavior when not dragging
+            if (cellData && !lockedBoxes[cellData.key]) {
+                canvas.style.cursor = 'pointer';
+                hoveredCell = cellData.key;
+            } else {
+                canvas.style.cursor = 'default';
+                hoveredCell = null;
+            }
+        });
+        
+        // Mouse up - finalize drag selection and lock all cells
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button !== 0) return; // Left click only
+            
+            if (isDragging && dragSelectedCells.size > 0) {
+                // Calculate total cost
+                const totalCost = getDragSelectionCost();
+                const validCells = [];
+                
+                // Collect valid cells
+                for (const key of dragSelectedCells) {
+                    if (!lockedBoxes[key] && gridMultipliers[key]) {
+                        validCells.push(key);
+                    }
+                }
+                
+                // Check if user has enough balance for all cells
+                if (totalCost > balance) {
+                    console.log(`Insufficient balance for ${validCells.length} cells! Need $${totalCost}, have $${balance}`);
+                    playLossSound();
+                    
+                    // Lock as many as we can afford
+                    let lockedCount = 0;
+                    for (const key of validCells) {
+                        if (betSize <= balance) {
+                            if (lockCell(key)) {
+                                lockedCount++;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    if (lockedCount > 0) {
+                        console.log(`Locked ${lockedCount} cells (insufficient balance for remaining)`);
+                    }
+                } else {
+                    // Lock all selected cells
+                    let lockedCount = 0;
+                    for (const key of validCells) {
+                        if (lockCell(key)) {
+                            lockedCount++;
+                        }
+                    }
+                    
+                    if (lockedCount > 0) {
+                        // Play success sound only once at the end
+                        if (lockedCount > 1) {
+                            playCashRegisterSound(); // Big sound for multi-select
+                        }
+                        console.log(`Drag selection: Locked ${lockedCount} cells, Total bet: $${lockedCount * betSize}`);
+                    }
+                }
+            }
+            
+            // Reset drag state
+            isDragging = false;
+            dragSelectedCells.clear();
+            canvas.style.cursor = hoveredCell ? 'pointer' : 'default';
+        });
+        
+        // Mouse leave - finalize drag if active, clear states
+        canvas.addEventListener('mouseleave', () => {
+            if (isDragging && dragSelectedCells.size > 0) {
+                // Finalize drag on leave - lock selected cells
+                let lockedCount = 0;
+                for (const key of dragSelectedCells) {
+                    if (!lockedBoxes[key] && gridMultipliers[key] && betSize <= balance) {
+                        if (lockCell(key)) {
+                            lockedCount++;
+                        }
+                    }
+                }
+                
+                if (lockedCount > 0) {
+                    console.log(`Drag selection (on leave): Locked ${lockedCount} cells`);
+                }
+            }
+            
+            isDragging = false;
+            dragSelectedCells.clear();
+            hoveredCell = null;
+            canvas.style.cursor = 'default';
+        });
+        
+        // Right-click to cancel drag selection
+        canvas.addEventListener('contextmenu', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                isDragging = false;
+                dragSelectedCells.clear();
+                canvas.style.cursor = 'default';
+                console.log('Drag selection cancelled');
+            }
+        });
+        
+        // ================================================
+        // DEPOSIT/WITHDRAWAL FUNCTIONALITY
+        // ================================================
+        
+        // ============================================
+        // ⚠️ CONFIGURATION - YOUR PROJECT SETTINGS ⚠️
+        // ============================================
+        
+        // Supabase Configuration
+        const SUPABASE_URL = 'https://kkrwjjvpwqqxnrieincp.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtrcndqanZwd3FxeG5yaWVpbmNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MTA2MjMsImV4cCI6MjA4NTE4NjYyM30.VVieM9VEdBEwgEI5P1_y1MJyk_KBFGk3ejk2FZtHGos';
+        
+        // Treasury Wallet Addresses
+        const DEPOSIT_ADDRESSES = {
+            ethereum: '0x0648B7CBb8C4424f6fAa17714d415106b12396eE',
+            arbitrum: '0x0648B7CBb8C4424f6fAa17714d415106b12396eE',
+            base: '0x0648B7CBb8C4424f6fAa17714d415106b12396eE',
+            solana: 'xEPGhfFzud5jKJrMmvzqwLhgMqz3KTjoJ3bPQB6mtKr'
+        };
+        
+        // ============================================
+        // Token contracts (standard - don't change)
+        // ============================================
+        const TOKEN_CONTRACTS = {
+            ethereum: {
+                USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+                USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
+            },
+            arbitrum: {
+                USDC: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+                USDT: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9'
+            },
+            base: {
+                USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+                USDT: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb'
+            },
+            solana: {
+                USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+                USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
+            }
+        };
+        
+        const NETWORKS = {
+            ethereum: { chainId: '0x1', chainName: 'Ethereum' },
+            arbitrum: { chainId: '0xa4b1', chainName: 'Arbitrum' },
+            base: { chainId: '0x2105', chainName: 'Base' },
+            solana: { chainName: 'Solana' }
+        };
+        
+        // ================================================
+        // TRADING MODE STATE (DEMO vs REAL)
+        // ================================================
+        let isRealMode = false;  // false = demo, true = real money
+        const DEMO_STARTING_BALANCE = 10000;
+        
+        // Demo Mode State (separate from real)
+        let demoBalance = DEMO_STARTING_BALANCE;
+        let demoStartingBalance = DEMO_STARTING_BALANCE;
+        let demoPendingBets = 0;
+        let demoTotalWins = 0;
+        let demoTotalLosses = 0;
+        let demoLockedBoxes = {};
+        
+        // Real Mode State (loaded from blockchain deposits)
+        let realBalance = 0;
+        let realStartingBalance = 0;
+        let realPendingBets = 0;
+        let realTotalWins = 0;
+        let realTotalLosses = 0;
+        let realLockedBoxes = {};
+        
+        // ================================================
+        // MODE SWITCHING FUNCTIONS
+        // ================================================
+        function toggleTradingMode() {
+            const toggle = document.getElementById('modeToggle');
+            const wasRealMode = isRealMode;
+            isRealMode = toggle.checked;
+            
+            // Update mode labels
+            document.getElementById('demoLabel').classList.toggle('active', !isRealMode);
+            document.getElementById('realLabel').classList.toggle('active', isRealMode);
+            
+            // Update balance indicator
+            const indicator = document.getElementById('balanceModeIndicator');
+            if (isRealMode) {
+                indicator.textContent = 'REAL';
+                indicator.className = 'balance-mode-indicator real';
+                document.getElementById('realModeBanner').classList.add('show');
+                document.getElementById('tradingPanel').classList.add('real-mode-active');
+            } else {
+                indicator.textContent = 'DEMO';
+                indicator.className = 'balance-mode-indicator demo';
+                document.getElementById('realModeBanner').classList.remove('show');
+                document.getElementById('tradingPanel').classList.remove('real-mode-active');
+            }
+            
+            // Update footer
+            const footer = document.querySelector('.footer');
+            if (footer) {
+                if (isRealMode) {
+                    footer.innerHTML = '💰 REAL MONEY MODE • Trading with deposited funds • Click or Drag to bet';
+                    footer.style.color = '#00ff88';
+                } else {
+                    footer.innerHTML = '🎮 DEMO MODE • $10,000 virtual balance • Click or Drag to bet';
+                    footer.style.color = '#8888aa';
+                }
+            }
+            
+            // Switch the active locked boxes
+            lockedBoxes = isRealMode ? realLockedBoxes : demoLockedBoxes;
+            
+            // Sync trading state variables to current mode
+            syncTradingStateToMode();
+            
+            // Update display
+            updateBalanceDisplay();
+            
+            // If switching to real mode, load real balance
+            if (isRealMode) {
+                if (currentAddress) {
+                    loadRealBalance();
+                } else if (realBalance === 0) {
+                    // Prompt to connect wallet and deposit
+                    setTimeout(() => {
+                        const shouldDeposit = confirm('💰 REAL MONEY MODE\n\nYour real balance is $0.00\n\nConnect wallet and deposit funds to start trading with real money?');
+                        if (shouldDeposit) {
+                            openDepositModal();
+                        }
+                    }, 100);
+                }
+            }
+            
+            console.log('Mode switched to:', isRealMode ? 'REAL MONEY' : 'DEMO');
+        }
+        
+        // Sync module-level trading vars to current mode
+        function syncTradingStateToMode() {
+            if (isRealMode) {
+                balance = realBalance;
+                startingBalance = realStartingBalance;
+                pendingBets = realPendingBets;
+                totalWins = realTotalWins;
+                totalLosses = realTotalLosses;
+            } else {
+                balance = demoBalance;
+                startingBalance = demoStartingBalance;
+                pendingBets = demoPendingBets;
+                totalWins = demoTotalWins;
+                totalLosses = demoTotalLosses;
+            }
+        }
+        
+        // Save current trading state back to mode-specific vars
+        function saveTradingStateToMode() {
+            if (isRealMode) {
+                realBalance = balance;
+                realPendingBets = pendingBets;
+                realTotalWins = totalWins;
+                realTotalLosses = totalLosses;
+            } else {
+                demoBalance = balance;
+                demoPendingBets = pendingBets;
+                demoTotalWins = totalWins;
+                demoTotalLosses = totalLosses;
+            }
+        }
+        
+        // Load real balance from Supabase (deposits - withdrawals)
+        async function loadRealBalance() {
+            if (!currentAddress) return;
+            
+            try {
+                // Get confirmed deposits
+                const depositsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const deposits = await depositsRes.json() || [];
+                
+                // Get withdrawals (not rejected)
+                const withdrawalsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const withdrawals = await withdrawalsRes.json() || [];
+                
+                let totalDeposited = 0;
+                let totalWithdrawn = 0;
+                
+                deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
+                withdrawals.forEach(w => {
+                    if (w.status === 'completed' || w.status === 'approved' || w.status === 'pending') {
+                        totalWithdrawn += parseFloat(w.amount) || 0;
+                    }
+                });
+                
+                realBalance = Math.max(0, totalDeposited - totalWithdrawn);
+                realStartingBalance = realBalance;
+                
+                if (isRealMode) {
+                    balance = realBalance;
+                    startingBalance = realStartingBalance;
+                    updateBalanceDisplay();
+                }
+                
+                console.log('Real balance loaded:', realBalance);
+                
+            } catch (error) {
+                console.error('Failed to load real balance:', error);
+            }
+        }
+        
+        // Wallet State
+        let currentWallet = null;
+        let currentProvider = null;
+        let currentAddress = null;
+        let selectedChain = 'ethereum';
+        let selectedDepositToken = 'USDC';
+        let selectedWithdrawToken = 'USDC';
+        let isWalletVerified = false;
+        let verificationSignature = null;
+        let walletTokenBalance = 0;
+        let platformBalance = 0;
+        
+        // Modal Functions
+        function openDepositModal() {
+            // Prompt to switch to real mode if in demo
+            if (!isRealMode) {
+                const switchMode = confirm('Deposits only work in REAL MONEY mode.\n\nSwitch to Real Money mode?');
+                if (switchMode) {
+                    document.getElementById('modeToggle').checked = true;
+                    toggleTradingMode();
+                } else {
+                    return;
+                }
+            }
+            
+            document.getElementById('depositModal').classList.add('show');
+            if (currentAddress) {
+                loadHistory();
+                loadAvailableBalance();
+                checkWalletTokenBalance();
+            }
+        }
+        
+        function closeDepositModal() {
+            document.getElementById('depositModal').classList.remove('show');
+        }
+        
+        function showModalStatus(message, type) {
+            const el = document.getElementById('modalStatus');
+            el.textContent = message;
+            el.className = 'modal-status-message show ' + type;
+            if (type === 'success') {
+                setTimeout(() => el.classList.remove('show'), 5000);
+            }
+        }
+        
+        function switchModalTab(tab) {
+            document.getElementById('depositTabBtn').classList.toggle('active', tab === 'deposit');
+            document.getElementById('withdrawTabBtn').classList.toggle('active', tab === 'withdraw');
+            document.getElementById('depositFormModal').style.display = tab === 'deposit' ? 'block' : 'none';
+            document.getElementById('withdrawFormModal').style.display = tab === 'withdraw' ? 'block' : 'none';
+            
+            if (tab === 'withdraw' && currentAddress) {
+                loadAvailableBalance();
+            }
+        }
+        
+        function selectChain(chain) {
+            selectedChain = chain;
+            document.querySelectorAll('.chain-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.chain === chain);
+            });
+            
+            if (currentWallet === 'phantom' && chain !== 'solana') {
+                showModalStatus('Phantom wallet only works with Solana.', 'error');
+            } else if ((currentWallet === 'metamask' || currentWallet === 'rabby') && chain === 'solana') {
+                showModalStatus('This wallet does not support Solana. Use Phantom.', 'error');
+            }
+            
+            if (currentAddress) {
+                checkWalletTokenBalance();
+            }
+        }
+        
+        function selectDepositToken(token) {
+            selectedDepositToken = token;
+            document.querySelectorAll('#depositFormModal .token-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.token === token);
+            });
+            if (currentAddress) checkWalletTokenBalance();
+        }
+        
+        function selectWithdrawToken(token) {
+            selectedWithdrawToken = token;
+            document.querySelectorAll('#withdrawFormModal .token-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.token === token);
+            });
+            loadAvailableBalance();
+        }
+        
+        // Wallet Connection
+        function toggleWalletOptions() {
+            document.getElementById('walletOptions').classList.toggle('show');
+        }
+        
+        async function connectWallet(type) {
+            try {
+                if (type === 'metamask' || type === 'rabby') {
+                    if (!window.ethereum) {
+                        showModalStatus('Wallet not detected. Please install MetaMask or Rabby.', 'error');
+                        return;
+                    }
+                    
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    currentWallet = type;
+                    currentProvider = window.ethereum;
+                    currentAddress = accounts[0];
+                    
+                    try {
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: NETWORKS[selectedChain].chainId }]
+                        });
+                    } catch (e) {
+                        console.log('Chain switch:', e);
+                    }
+                    
+                } else if (type === 'phantom') {
+                    const phantom = window.phantom?.solana || window.solana;
+                    if (!phantom?.isPhantom) {
+                        showModalStatus('Phantom not detected. Please install it.', 'error');
+                        return;
+                    }
+                    
+                    const response = await phantom.connect();
+                    currentWallet = 'phantom';
+                    currentProvider = phantom;
+                    currentAddress = response.publicKey.toString();
+                    selectedChain = 'solana';
+                    
+                    document.querySelectorAll('.chain-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.chain === 'solana');
+                    });
+                }
+                
+                // Update UI
+                document.getElementById('walletStatusConnected').style.display = 'flex';
+                document.getElementById('walletStatusDisconnected').style.display = 'none';
+                document.getElementById('connectedWalletAddress').textContent = 
+                    currentAddress.slice(0, 6) + '...' + currentAddress.slice(-4);
+                document.getElementById('walletOptions').classList.remove('show');
+                
+                document.getElementById('walletMainBtn').classList.add('connected');
+                document.getElementById('walletMainText').textContent = currentAddress.slice(0, 6) + '...' + currentAddress.slice(-4);
+                
+                showModalStatus('Wallet connected!', 'success');
+                
+                checkWalletVerification();
+                checkWalletTokenBalance();
+                loadPlatformBalance();
+                loadHistory();
+                
+                // Load real balance for game mode
+                loadRealBalance();
+                
+            } catch (error) {
+                showModalStatus('Connection failed: ' + error.message, 'error');
+            }
+        }
+        
+        function disconnectWallet() {
+            currentWallet = null;
+            currentProvider = null;
+            currentAddress = null;
+            isWalletVerified = false;
+            verificationSignature = null;
+            
+            document.getElementById('walletStatusConnected').style.display = 'none';
+            document.getElementById('walletStatusDisconnected').style.display = 'block';
+            document.getElementById('walletMainBtn').classList.remove('connected');
+            document.getElementById('walletMainText').textContent = 'Deposit / Withdraw';
+            document.getElementById('historySection').style.display = 'none';
+            
+            document.getElementById('verificationSection').classList.remove('verified');
+            document.getElementById('verificationStatus').innerHTML = '🔐 Please verify wallet ownership to request withdrawals';
+            document.getElementById('verifyBtn').style.display = 'block';
+            document.getElementById('withdrawFormFields').style.display = 'none';
+            
+            showModalStatus('Wallet disconnected', 'info');
+        }
+        
+        // Wallet Verification
+        function checkWalletVerification() {
+            const savedSig = sessionStorage.getItem('walletVerified_' + currentAddress.toLowerCase());
+            if (savedSig) {
+                isWalletVerified = true;
+                verificationSignature = savedSig;
+                showVerifiedUI();
+            }
+        }
+        
+        async function verifyWallet() {
+            if (!currentAddress) {
+                showModalStatus('Please connect your wallet first', 'error');
+                return;
+            }
+            
+            const message = `Verify wallet ownership for BTC Grid\n\nWallet: ${currentAddress}\nTimestamp: ${Date.now()}`;
+            
+            try {
+                document.getElementById('verifyBtn').innerHTML = '<span class="loading-spinner"></span>Signing...';
+                
+                let signature;
+                if (currentWallet === 'phantom') {
+                    const encodedMessage = new TextEncoder().encode(message);
+                    const signedMessage = await currentProvider.signMessage(encodedMessage, 'utf8');
+                    signature = btoa(String.fromCharCode(...signedMessage.signature));
+                } else {
+                    signature = await currentProvider.request({
+                        method: 'personal_sign',
+                        params: [message, currentAddress]
+                    });
+                }
+                
+                verificationSignature = signature;
+                isWalletVerified = true;
+                sessionStorage.setItem('walletVerified_' + currentAddress.toLowerCase(), signature);
+                
+                await registerWalletVerification(signature);
+                
+                showVerifiedUI();
+                showModalStatus('Wallet verified!', 'success');
+                
+            } catch (error) {
+                showModalStatus('Verification failed: ' + error.message, 'error');
+                document.getElementById('verifyBtn').textContent = 'Sign Message to Verify';
+            }
+        }
+        
+        async function registerWalletVerification(signature) {
+            try {
+                await fetch(SUPABASE_URL + '/rest/v1/wallet_verifications', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        wallet_address: currentAddress.toLowerCase(),
+                        signature: signature,
+                        verified_at: new Date().toISOString()
+                    })
+                });
+            } catch (e) {
+                console.log('Verification registration:', e);
+            }
+        }
+        
+        function showVerifiedUI() {
+            document.getElementById('verificationSection').classList.add('verified');
+            document.getElementById('verificationStatus').innerHTML = '✅ Wallet verified!';
+            document.getElementById('verifyBtn').style.display = 'none';
+            document.getElementById('withdrawFormFields').style.display = 'block';
+            loadAvailableBalance();
+        }
+        
+        // Balance Functions
+        async function checkWalletTokenBalance() {
+            if (!currentAddress) return;
+            
+            try {
+                let tokenBalance = 0;
+                
+                if (selectedChain !== 'solana' && currentProvider) {
+                    const tokenAddress = TOKEN_CONTRACTS[selectedChain][selectedDepositToken];
+                    const balanceData = '0x70a08231' + currentAddress.slice(2).padStart(64, '0');
+                    
+                    const result = await currentProvider.request({
+                        method: 'eth_call',
+                        params: [{ to: tokenAddress, data: balanceData }, 'latest']
+                    });
+                    
+                    tokenBalance = parseInt(result, 16) / 1e6;
+                }
+                
+                walletTokenBalance = tokenBalance;
+                document.getElementById('walletTokenBalance').textContent = tokenBalance.toFixed(2) + ' ' + selectedDepositToken;
+                
+                const depositAmount = parseFloat(document.getElementById('depositAmountInput').value) || 0;
+                document.getElementById('depositActionBtn').disabled = !currentAddress || depositAmount <= 0;
+                
+            } catch (error) {
+                document.getElementById('walletTokenBalance').textContent = 'Error';
+            }
+        }
+        
+        async function loadPlatformBalance() {
+            if (!currentAddress) return;
+            
+            try {
+                const depositsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const deposits = await depositsRes.json() || [];
+                
+                const withdrawalsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const withdrawals = await withdrawalsRes.json() || [];
+                
+                let totalDeposited = 0;
+                let totalWithdrawn = 0;
+                
+                deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
+                withdrawals.forEach(w => {
+                    if (w.status === 'completed' || w.status === 'approved' || w.status === 'pending') {
+                        totalWithdrawn += parseFloat(w.amount) || 0;
+                    }
+                });
+                
+                platformBalance = totalDeposited - totalWithdrawn;
+                
+            } catch (error) {
+                console.error('Failed to load balance:', error);
+            }
+        }
+        
+        async function loadAvailableBalance() {
+            if (!currentAddress) return;
+            
+            try {
+                const depositsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const deposits = await depositsRes.json() || [];
+                
+                const withdrawalsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const withdrawals = await withdrawalsRes.json() || [];
+                
+                let totalDeposited = 0;
+                let totalWithdrawn = 0;
+                
+                deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
+                withdrawals.forEach(w => {
+                    if (w.status !== 'rejected') {
+                        totalWithdrawn += parseFloat(w.amount) || 0;
+                    }
+                });
+                
+                const available = Math.max(0, totalDeposited - totalWithdrawn);
+                document.getElementById('availableWithdrawBalance').textContent = '$' + available.toFixed(2);
+                
+                const withdrawAmount = parseFloat(document.getElementById('withdrawAmountInput').value) || 0;
+                document.getElementById('withdrawActionBtn').disabled = !isWalletVerified || withdrawAmount <= 0 || withdrawAmount > available;
+                
+            } catch (error) {
+                document.getElementById('availableWithdrawBalance').textContent = 'Error';
+            }
+        }
+        
+        // Deposit Function
+        async function executeDeposit() {
+            if (!currentAddress) {
+                showModalStatus('Please connect your wallet first', 'error');
+                return;
+            }
+            
+            const amount = parseFloat(document.getElementById('depositAmountInput').value);
+            if (!amount || amount <= 0) {
+                showModalStatus('Please enter a valid amount', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('depositActionBtn');
+            btn.innerHTML = '<span class="loading-spinner"></span>Processing...';
+            btn.disabled = true;
+            
+            try {
+                if (selectedChain === 'solana') {
+                    showModalStatus('Solana deposits coming soon. Please use an EVM chain.', 'info');
+                    btn.innerHTML = 'Deposit';
+                    btn.disabled = false;
+                    return;
+                }
+                
+                const targetChainId = NETWORKS[selectedChain].chainId;
+                try {
+                    await currentProvider.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: targetChainId }]
+                    });
+                } catch (e) {
+                    if (e.code === 4902) {
+                        throw new Error('Please add ' + NETWORKS[selectedChain].chainName + ' to your wallet');
+                    }
+                }
+                
+                const tokenAddress = TOKEN_CONTRACTS[selectedChain][selectedDepositToken];
+                const recipient = DEPOSIT_ADDRESSES[selectedChain];
+                const amountInUnits = Math.floor(amount * 1e6);
+                
+                const methodId = '0xa9059cbb';
+                const paddedAddress = recipient.slice(2).toLowerCase().padStart(64, '0');
+                const paddedAmount = amountInUnits.toString(16).padStart(64, '0');
+                const data = methodId + paddedAddress + paddedAmount;
+                
+                const txParams = {
+                    to: tokenAddress,
+                    from: currentAddress,
+                    data: data,
+                    value: '0x0'
+                };
+                
+                try {
+                    const gas = await currentProvider.request({ method: 'eth_estimateGas', params: [txParams] });
+                    txParams.gas = gas;
+                } catch (e) {
+                    txParams.gas = '0x249F0';
+                }
+                
+                const txHash = await currentProvider.request({
+                    method: 'eth_sendTransaction',
+                    params: [txParams]
+                });
+                
+                showModalStatus('Transaction submitted! Verifying...', 'success');
+                
+                setTimeout(() => monitorDeposit(txHash, selectedChain, selectedDepositToken, amount), 3000);
+                
+            } catch (error) {
+                if (error.code === 4001) {
+                    showModalStatus('Transaction cancelled', 'info');
+                } else {
+                    showModalStatus('Error: ' + error.message, 'error');
+                }
+            } finally {
+                btn.innerHTML = 'Deposit';
+                btn.disabled = false;
+            }
+        }
+        
+        async function monitorDeposit(txHash, network, token, amount) {
+            let attempts = 0;
+            const maxAttempts = 30;
+            
+            const checkTx = async () => {
+                attempts++;
+                
+                try {
+                    const response = await fetch(SUPABASE_URL + '/functions/v1/verify-deposit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + SUPABASE_KEY
+                        },
+                        body: JSON.stringify({
+                            tx_hash: txHash,
+                            network: network,
+                            token: token,
+                            wallet_address: currentAddress
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showModalStatus('Deposit confirmed! +$' + result.amount.toFixed(2), 'success');
+                        loadPlatformBalance();
+                        loadHistory();
+                        document.getElementById('depositAmountInput').value = '';
+                        
+                        // Update real money balance for the game
+                        loadRealBalance();
+                        
+                        return;
+                    }
+                    
+                    if (result.reason === 'not_found' && attempts < maxAttempts) {
+                        setTimeout(checkTx, 5000);
+                    } else if (result.reason === 'duplicate') {
+                        showModalStatus('This transaction was already processed', 'info');
+                    } else {
+                        showModalStatus('Verification failed: ' + (result.error || 'Unknown error'), 'error');
+                    }
+                    
+                } catch (error) {
+                    if (attempts < maxAttempts) {
+                        setTimeout(checkTx, 5000);
+                    } else {
+                        showModalStatus('Verification timed out. Please contact support.', 'error');
+                    }
+                }
+            };
+            
+            checkTx();
+        }
+        
+        // Withdraw Function
+        async function executeWithdraw() {
+            if (!currentAddress || !isWalletVerified) {
+                showModalStatus('Please verify your wallet first', 'error');
+                return;
+            }
+            
+            const amount = parseFloat(document.getElementById('withdrawAmountInput').value);
+            if (!amount || amount < 1) {
+                showModalStatus('Minimum withdrawal is $1', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('withdrawActionBtn');
+            btn.innerHTML = '<span class="loading-spinner"></span>Submitting...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch(SUPABASE_URL + '/functions/v1/submit-withdrawal', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + SUPABASE_KEY
+                    },
+                    body: JSON.stringify({
+                        wallet_address: currentAddress,
+                        amount: amount,
+                        token: selectedWithdrawToken,
+                        network: selectedChain,
+                        verification_signature: verificationSignature
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showModalStatus('Withdrawal request submitted!', 'success');
+                    document.getElementById('withdrawAmountInput').value = '';
+                    loadAvailableBalance();
+                    loadPlatformBalance();
+                    loadHistory();
+                } else {
+                    showModalStatus('Error: ' + result.error, 'error');
+                }
+                
+            } catch (error) {
+                showModalStatus('Error: ' + error.message, 'error');
+            } finally {
+                btn.innerHTML = 'Request Withdrawal';
+                btn.disabled = false;
+            }
+        }
+        
+        // History
+        async function loadHistory() {
+            if (!currentAddress) return;
+            
+            document.getElementById('historySection').style.display = 'block';
+            
+            try {
+                const depositsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&order=created_at.desc&limit=10',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const deposits = await depositsRes.json() || [];
+                
+                const withdrawalsRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&order=created_at.desc&limit=10',
+                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                );
+                const withdrawals = await withdrawalsRes.json() || [];
+                
+                let items = [];
+                
+                deposits.forEach(d => {
+                    items.push({
+                        type: 'deposit',
+                        amount: parseFloat(d.amount),
+                        token: d.token,
+                        status: d.status,
+                        date: new Date(d.created_at)
+                    });
+                });
+                
+                withdrawals.forEach(w => {
+                    items.push({
+                        type: 'withdrawal',
+                        amount: parseFloat(w.amount),
+                        token: w.token,
+                        status: w.status,
+                        date: new Date(w.created_at)
+                    });
+                });
+                
+                items.sort((a, b) => b.date - a.date);
+                items = items.slice(0, 10);
+                
+                const listEl = document.getElementById('historyList');
+                
+                if (items.length === 0) {
+                    listEl.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No transactions yet</div>';
+                } else {
+                    listEl.innerHTML = items.map(item => `
+                        <div class="history-item">
+                            <div class="history-item-left">
+                                <div class="history-item-icon ${item.type}">
+                                    ${item.type === 'deposit' ? '↓' : '↑'}
+                                </div>
+                                <div>
+                                    <div class="history-item-type">${item.type === 'deposit' ? 'Deposit' : 'Withdrawal'}</div>
+                                    <div class="history-item-date">${item.date.toLocaleDateString()} ${item.date.toLocaleTimeString()}</div>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="history-item-amount ${item.type}">
+                                    ${item.type === 'deposit' ? '+' : '-'}$${item.amount.toFixed(2)}
+                                </div>
+                                <span class="history-item-status ${item.status}">${item.status}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+            } catch (error) {
+                console.error('History load error:', error);
+            }
+        }
+        
+        // Input validation for modal
+        document.getElementById('depositAmountInput').addEventListener('input', function() {
+            const amount = parseFloat(this.value) || 0;
+            document.getElementById('depositActionBtn').disabled = !currentAddress || amount <= 0;
+        });
+        
+        document.getElementById('withdrawAmountInput').addEventListener('input', function() {
+            loadAvailableBalance();
+        });
+        
+        // Close modal on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeDepositModal();
+            }
+        });
+        
+        // Close modal on backdrop click
+        document.getElementById('depositModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDepositModal();
+            }
+        });
+    </script>
+</body>
+</html>
