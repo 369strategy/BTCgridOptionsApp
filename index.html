@@ -1686,9 +1686,9 @@
             }
         }
         
-        // Locked boxes state
+        // Locked boxes state (reference - actual variable declared earlier)
         // Key: "timestamp_priceLevel", Value: { multiplier, touched, expired, priceLevel, cellTs, lockedAt, betAmount }
-        let lockedBoxes = {};
+        // lockedBoxes is declared in trading state section and swapped when mode changes
         
         // Hover state for smooth highlighting
         let hoveredCell = null;
