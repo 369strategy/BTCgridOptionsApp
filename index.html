@@ -515,20 +515,16 @@
             box-shadow: 0 0 15px rgba(255, 200, 0, 0.3);
         }
         .mode-slider::before {
-            content: '🎮';
+            content: '';
             position: absolute;
             width: 22px;
             height: 22px;
             left: 3px;
             bottom: 3px;
-            background: #fff;
+            background: #1a1a2e;
             border-radius: 50%;
             transition: all 0.4s;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.1);
         }
         .mode-toggle input:checked + .mode-slider {
             background: linear-gradient(135deg, #00ff88, #00d4ff);
@@ -536,7 +532,7 @@
         }
         .mode-toggle input:checked + .mode-slider::before {
             transform: translateX(24px);
-            content: '💰';
+            background: #1a1a2e;
         }
         
         /* Real Money Mode Indicators */
@@ -735,6 +731,46 @@
         .modal-form-input:focus { outline: none; border-color: #00d4ff; }
         .modal-form-input::placeholder { color: #444; }
         
+        .input-with-max {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-with-max .modal-form-input {
+            padding-right: 60px;
+        }
+        .max-btn {
+            position: absolute;
+            right: 10px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #00d4ff, #00ff88);
+            border: none;
+            border-radius: 6px;
+            color: #000;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        .max-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+        }
+        .wallet-balance-hint {
+            font-size: 12px;
+            color: #8888aa;
+            margin-top: 6px;
+            display: none;
+        }
+        .wallet-balance-hint.show {
+            display: block;
+        }
+        .wallet-balance-hint span {
+            color: #00ff88;
+            font-family: monospace;
+        }
+        
         .token-selector { display: flex; gap: 8px; }
         .token-btn {
             flex: 1; display: flex; align-items: center; justify-content: center;
@@ -886,6 +922,70 @@
             margin-right: 8px;
         }
         @keyframes modalSpin { to { transform: rotate(360deg); } }
+        
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            background: rgba(20, 20, 35, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 14px 20px;
+            min-width: 280px;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            animation: toastSlideIn 0.3s ease;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .toast.hiding {
+            animation: toastSlideOut 0.3s ease forwards;
+        }
+        .toast-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .toast-message {
+            flex: 1;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #ffffff;
+        }
+        .toast.success {
+            border-left: 4px solid #00ff88;
+        }
+        .toast.success .toast-icon { color: #00ff88; }
+        .toast.error {
+            border-left: 4px solid #ff4466;
+        }
+        .toast.error .toast-icon { color: #ff4466; }
+        .toast.info {
+            border-left: 4px solid #4488ff;
+        }
+        .toast.info .toast-icon { color: #4488ff; }
+        .toast.warning {
+            border-left: 4px solid #ffaa00;
+        }
+        .toast.warning .toast-icon { color: #ffaa00; }
+        @keyframes toastSlideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes toastSlideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -967,7 +1067,7 @@
         <section class="trading-panel" id="tradingPanel">
             <!-- Real Money Mode Banner -->
             <div class="real-mode-banner" id="realModeBanner">
-                💰 <strong>REAL MONEY MODE</strong> — You are trading with deposited funds. Trade responsibly!
+                <strong>REAL MONEY MODE</strong> — You are trading with deposited funds. Trade responsibly!
             </div>
             
             <div class="balance-section">
@@ -1114,7 +1214,7 @@
         </div>
 
         <footer class="footer">
-            🎮 DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • 50% House Edge • 🔊 • Click or Drag to select cells
+            DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • 50% House Edge • Click or Drag to select cells
         </footer>
     </div>
 
@@ -1124,7 +1224,7 @@
     <div class="modal-overlay" id="depositModal">
         <div class="modal-container">
             <div class="modal-header">
-                <h2 class="modal-title">💰 Deposit & Withdraw</h2>
+                <h2 class="modal-title">Deposit & Withdraw</h2>
                 <button class="modal-close" onclick="closeDepositModal()">&times;</button>
             </div>
             <div class="modal-body">
@@ -1213,7 +1313,13 @@
                     
                     <div class="modal-form-group">
                         <label>Amount</label>
-                        <input type="number" class="modal-form-input" id="depositAmountInput" placeholder="0.00" step="0.01" min="1">
+                        <div class="input-with-max">
+                            <input type="number" class="modal-form-input" id="depositAmountInput" placeholder="0.00" step="0.01" min="1">
+                            <button class="max-btn" onclick="setMaxDeposit()">MAX</button>
+                        </div>
+                        <div class="wallet-balance-hint" id="walletBalanceHint">
+                            Wallet balance: <span id="walletBalanceHintValue">0.00 USDC</span>
+                        </div>
                     </div>
                     
                     <button class="action-btn" id="depositActionBtn" onclick="executeDeposit()" disabled>
@@ -1221,7 +1327,7 @@
                     </button>
                     
                     <div class="modal-info-box">
-                        💡 Deposits are verified on-chain and credited automatically. Make sure you're on the correct network.
+                        Deposits are verified on-chain and credited automatically. Make sure you're on the correct network.
                     </div>
                 </div>
                 
@@ -1230,7 +1336,7 @@
                     <!-- Verification Section -->
                     <div class="verification-section" id="verificationSection">
                         <div class="verification-status" id="verificationStatus">
-                            🔐 Please verify wallet ownership to request withdrawals
+                            Please verify wallet ownership to request withdrawals
                         </div>
                         <button class="verify-btn" id="verifyBtn" onclick="verifyWallet()">
                             Sign Message to Verify
@@ -1267,7 +1373,7 @@
                         </button>
                         
                         <div class="modal-info-box">
-                            💡 Withdrawals are processed manually within 24-48 hours. Funds will be sent to your connected wallet.
+                            Withdrawals are processed manually within 24-48 hours. Funds will be sent to your connected wallet.
                         </div>
                     </div>
                 </div>
@@ -1387,7 +1493,7 @@
             
             // Only allow reset in demo mode
             if (typeof isRealMode !== 'undefined' && isRealMode) {
-                alert('Cannot reset in Real Money mode.\n\nUse withdrawals to manage your funds.');
+                showToast('Cannot reset in Real Money mode. Use withdrawals to manage your funds.', 'warning');
                 return;
             }
             
@@ -1433,7 +1539,7 @@
             // Update footer only in demo mode
             const footer = document.querySelector('.footer');
             if (footer && (typeof isRealMode === 'undefined' || !isRealMode)) {
-                footer.innerHTML = '🎮 DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • ' + value + '% House Edge • 🔊 • Click or Drag to select cells';
+                footer.innerHTML = 'DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • ' + value + '% House Edge • Click or Drag to select cells';
             }
             console.log('House edge set to ' + value + '%');
         }
@@ -3428,6 +3534,12 @@
         // Solana RPC endpoint (Alchemy - same API key as EVM)
         const SOLANA_RPC = 'https://solana-mainnet.g.alchemy.com/v2/UJ-pPERNqt6Q7E5CmtbwG';
         
+        // Solana token mint addresses (mainnet)
+        const SOLANA_TOKEN_MINTS = {
+            USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+            USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
+        };
+        
         // ============================================
         // Token contracts (standard - don't change)
         // ============================================
@@ -3498,21 +3610,23 @@
                 indicator.className = 'balance-mode-indicator real';
                 document.getElementById('realModeBanner').classList.add('show');
                 document.getElementById('tradingPanel').classList.add('real-mode-active');
+                showToast('REAL MONEY MODE — You are trading with deposited funds. Trade responsibly!', 'warning');
             } else {
                 indicator.textContent = 'DEMO';
                 indicator.className = 'balance-mode-indicator demo';
                 document.getElementById('realModeBanner').classList.remove('show');
                 document.getElementById('tradingPanel').classList.remove('real-mode-active');
+                showToast('DEMO MODE — Trading with $10,000 virtual balance', 'info');
             }
             
             // Update footer
             const footer = document.querySelector('.footer');
             if (footer) {
                 if (isRealMode) {
-                    footer.innerHTML = '💰 REAL MONEY MODE • Trading with deposited funds • Click or Drag to bet';
+                    footer.innerHTML = 'REAL MONEY MODE • Trading with deposited funds • Click or Drag to bet';
                     footer.style.color = '#00ff88';
                 } else {
-                    footer.innerHTML = '🎮 DEMO MODE • $10,000 virtual balance • Click or Drag to bet';
+                    footer.innerHTML = 'DEMO MODE • $10,000 virtual balance • Click or Drag to bet';
                     footer.style.color = '#8888aa';
                 }
             }
@@ -3533,7 +3647,7 @@
                 } else if (realBalance === 0) {
                     // Prompt to connect wallet and deposit
                     setTimeout(() => {
-                        const shouldDeposit = confirm('💰 REAL MONEY MODE\n\nYour real balance is $0.00\n\nConnect wallet and deposit funds to start trading with real money?');
+                        const shouldDeposit = confirm('REAL MONEY MODE\n\nYour real balance is $0.00\n\nConnect wallet and deposit funds to start trading with real money?');
                         if (shouldDeposit) {
                             openDepositModal();
                         }
@@ -3833,12 +3947,46 @@
             document.getElementById('depositModal').classList.remove('show');
         }
         
+        // Toast notification function
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const icons = {
+                success: '✓',
+                error: '✕',
+                info: 'ℹ',
+                warning: '⚠'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.innerHTML = `
+                <span class="toast-icon">${icons[type] || icons.info}</span>
+                <span class="toast-message">${message}</span>
+            `;
+            
+            container.appendChild(toast);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                toast.classList.add('hiding');
+                setTimeout(() => toast.remove(), 300);
+            }, 5000);
+        }
+        
         function showModalStatus(message, type) {
+            // Show toast notification
+            showToast(message, type);
+            
+            // Also update modal status if modal is open
             const el = document.getElementById('modalStatus');
-            el.textContent = message;
-            el.className = 'modal-status-message show ' + type;
-            if (type === 'success') {
-                setTimeout(() => el.classList.remove('show'), 5000);
+            if (el) {
+                el.textContent = message;
+                el.className = 'modal-status-message show ' + type;
+                if (type === 'success') {
+                    setTimeout(() => el.classList.remove('show'), 5000);
+                }
             }
         }
         
@@ -3970,7 +4118,7 @@
             document.getElementById('historySection').style.display = 'none';
             
             document.getElementById('verificationSection').classList.remove('verified');
-            document.getElementById('verificationStatus').innerHTML = '🔐 Please verify wallet ownership to request withdrawals';
+            document.getElementById('verificationStatus').innerHTML = 'Please verify wallet ownership to request withdrawals';
             document.getElementById('verifyBtn').style.display = 'block';
             document.getElementById('withdrawFormFields').style.display = 'none';
             
@@ -4048,7 +4196,7 @@
         
         function showVerifiedUI() {
             document.getElementById('verificationSection').classList.add('verified');
-            document.getElementById('verificationStatus').innerHTML = '✅ Wallet verified!';
+            document.getElementById('verificationStatus').innerHTML = 'Wallet verified!';
             document.getElementById('verifyBtn').style.display = 'none';
             document.getElementById('withdrawFormFields').style.display = 'block';
             loadAvailableBalance();
@@ -4061,7 +4209,46 @@
             try {
                 let tokenBalance = 0;
                 
-                if (selectedChain !== 'solana' && currentProvider) {
+                if (selectedChain === 'solana') {
+                    // Solana token balance check
+                    console.log('Checking Solana balance...');
+                    const phantom = window.phantom?.solana || window.solana;
+                    console.log('Phantom:', phantom);
+                    console.log('Phantom publicKey:', phantom?.publicKey?.toString());
+                    
+                    if (phantom && phantom.publicKey) {
+                        await loadSolanaWeb3();
+                        const { Connection, PublicKey } = window.solanaWeb3;
+                        const connection = new Connection(SOLANA_RPC, 'confirmed');
+                        
+                        const tokenMint = SOLANA_TOKEN_MINTS[selectedDepositToken];
+                        console.log('Token mint:', tokenMint);
+                        console.log('Selected token:', selectedDepositToken);
+                        
+                        if (tokenMint) {
+                            const mintPubkey = new PublicKey(tokenMint);
+                            console.log('Fetching token accounts for:', phantom.publicKey.toString());
+                            
+                            const tokenAccounts = await connection.getTokenAccountsByOwner(
+                                phantom.publicKey,
+                                { mint: mintPubkey }
+                            );
+                            
+                            console.log('Token accounts found:', tokenAccounts.value.length);
+                            
+                            if (tokenAccounts.value.length > 0) {
+                                const accountInfo = await connection.getTokenAccountBalance(
+                                    tokenAccounts.value[0].pubkey
+                                );
+                                console.log('Account info:', accountInfo);
+                                tokenBalance = parseFloat(accountInfo.value.uiAmount) || 0;
+                            }
+                        }
+                    } else {
+                        console.log('Phantom not connected or no publicKey');
+                    }
+                } else if (currentProvider) {
+                    // EVM token balance check
                     const tokenAddress = TOKEN_CONTRACTS[selectedChain][selectedDepositToken];
                     const balanceData = '0x70a08231' + currentAddress.slice(2).padStart(64, '0');
                     
@@ -4073,14 +4260,32 @@
                     tokenBalance = parseInt(result, 16) / 1e6;
                 }
                 
+                console.log('Final token balance:', tokenBalance);
                 walletTokenBalance = tokenBalance;
                 document.getElementById('walletTokenBalance').textContent = tokenBalance.toFixed(2) + ' ' + selectedDepositToken;
+                
+                // Update wallet balance hint under amount input
+                const hintEl = document.getElementById('walletBalanceHint');
+                const hintValueEl = document.getElementById('walletBalanceHintValue');
+                if (hintEl && hintValueEl) {
+                    hintValueEl.textContent = tokenBalance.toFixed(2) + ' ' + selectedDepositToken;
+                    hintEl.classList.add('show');
+                }
                 
                 const depositAmount = parseFloat(document.getElementById('depositAmountInput').value) || 0;
                 document.getElementById('depositActionBtn').disabled = !currentAddress || depositAmount <= 0;
                 
             } catch (error) {
+                console.error('Balance check error:', error);
                 document.getElementById('walletTokenBalance').textContent = 'Error';
+            }
+        }
+        
+        // Set max deposit amount from wallet balance
+        function setMaxDeposit() {
+            if (walletTokenBalance > 0) {
+                document.getElementById('depositAmountInput').value = walletTokenBalance.toFixed(2);
+                document.getElementById('depositActionBtn').disabled = false;
             }
         }
         
@@ -4157,12 +4362,6 @@
         // =============================================
         // SOLANA SPL TOKEN DEPOSIT
         // =============================================
-        // Solana token mint addresses (mainnet)
-        const SOLANA_TOKEN_MINTS = {
-            USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-            USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
-        };
-        
         const TOKEN_PROGRAM_ID_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
         
         async function executeSolanaDeposit(amount) {
@@ -4616,5 +4815,8 @@
             }
         });
     </script>
+    
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 </body>
 </html>
