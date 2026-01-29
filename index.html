@@ -1139,7 +1139,7 @@
                         <div class="pattern-section">
                             <label class="pattern-label">PATTERN</label>
                             <div class="pattern-buttons">
-                                <button class="pattern-btn active" id="patternThreshold" onclick="setPattern('threshold')" title="Bet on any cell above multiplier threshold">
+                                <button class="pattern-btn" id="patternThreshold" onclick="setPattern('threshold')" title="Bet on any cell above multiplier threshold">
                                     <span class="pattern-preview">⊞</span> THRESHOLD
                                 </button>
                                 <button class="pattern-btn" id="patternLine" onclick="setPattern('line')" title="Horizontal line at current price">
@@ -1173,7 +1173,7 @@
                             </div>
                         </div>
                         <div class="auto-bet-stats" id="autoBetStats">
-                            Bets placed: <span id="autoBetCount">0</span> | Pattern: <span id="patternName">Threshold</span>
+                            Bets placed: <span id="autoBetCount">0</span> | Pattern: <span id="patternName">None</span>
                         </div>
                     </div>
                 </div>
@@ -1306,11 +1306,6 @@
                         </div>
                     </div>
                     
-                    <div class="modal-balance-display">
-                        <span class="modal-balance-label">Wallet Balance</span>
-                        <span class="modal-balance-value" id="walletTokenBalance">--</span>
-                    </div>
-                    
                     <div class="modal-form-group">
                         <label>Amount</label>
                         <div class="input-with-max">
@@ -1424,7 +1419,7 @@
         let autoBetThreshold = 5;
         let autoBetCount = 0;
         let autoBetLocked = new Set();
-        let autoBetPattern = 'threshold';
+        let autoBetPattern = null;
         let patternCells = new Set();
         let patternLength = 5;
         let patternWidth = 3;
@@ -1574,6 +1569,16 @@
         
         // Pattern selector
         function setPattern(pattern) {
+            // Toggle off if clicking same pattern
+            if (autoBetPattern === pattern) {
+                autoBetPattern = null;
+                document.querySelectorAll('.pattern-btn').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('patternName').textContent = 'None';
+                patternCells.clear();
+                console.log('Pattern deselected');
+                return;
+            }
+            
             autoBetPattern = pattern;
             
             // Update button states
@@ -1698,10 +1703,28 @@
         function updatePatternCells() {
             patternCells.clear();
             
-            if (autoBetPattern === 'threshold') return;
+            // No pattern selected - nothing to show
+            if (!autoBetPattern) return;
+            
+            const now = Date.now();
+            
+            if (autoBetPattern === 'threshold') {
+                // Threshold pattern: show ALL cells that meet minimum multiplier
+                for (const key in gridMultipliers) {
+                    const data = gridMultipliers[key];
+                    if (data && data.cellTs > now && (data.cellTs - now) >= 10000) {
+                        if (!lockedBoxes[key]) {
+                            const mult = getAdjustedMultiplier(data, now, price);
+                            if (mult >= autoBetThreshold) {
+                                patternCells.add(key);
+                            }
+                        }
+                    }
+                }
+                return;
+            }
             
             const cellKeys = getPatternCellKeys();
-            const now = Date.now();
             
             for (const key of cellKeys) {
                 // Only include future cells with >10s until start
@@ -1719,7 +1742,7 @@
         }
         
         function runAutoBet() {
-            if (!autoBetEnabled || !price) return;
+            if (!autoBetEnabled || !price || !autoBetPattern) return;
             
             const now = Date.now();
             const msPerCell = 10000;
@@ -1731,10 +1754,10 @@
             // Get cells to consider based on pattern
             let cellsToCheck;
             if (autoBetPattern === 'threshold') {
-                // Original behavior: check all cells
+                // Threshold mode: check all cells
                 cellsToCheck = Object.keys(gridMultipliers);
             } else {
-                // Pattern mode: only check pattern cells
+                // Other patterns: only check pattern cells
                 cellsToCheck = getPatternCellKeys();
             }
             
@@ -2770,7 +2793,7 @@
                 // Check if this cell is hovered
                 const isHovered = hoveredCell === key;
                 const isDragSelected = dragSelectedCells.has(key);
-                const isPatternCell = patternCells.has(key) && autoBetPattern !== 'threshold';
+                const isPatternCell = patternCells.has(key);
                 const hoverBoost = (isHovered || isDragSelected || isPatternCell) ? 0.3 : 0;
                 
                 // Opacity based on distance from center (NOW line and current price)
@@ -2856,7 +2879,7 @@
                         // Show bet amount
                         ctx.font = '10px monospace';
                         ctx.fillStyle = `rgba(255, 255, 255, ${baseOpacity + 0.3})`;
-                        ctx.fillText('$' + betSize, cellCenterX, cellCenterY + 6);
+                        ctx.fillText('$' + betSize.toFixed(2), cellCenterX, cellCenterY + 6);
                         
                         // Show PENDING label
                         ctx.font = 'bold 8px monospace';
@@ -3019,7 +3042,7 @@
                     const isResolved = box.touched || box.expired;
                     const betTextAlpha = isResolved ? 0.65 : 1;
                     ctx.fillStyle = box.touched ? `rgba(0, 255, 136, ${betTextAlpha})` : box.expired ? `rgba(255, 68, 68, ${betTextAlpha})` : '#fff';
-                    const betText = box.touched ? '+$' + (box.payout || box.betAmount * box.multiplier).toFixed(0) : '$' + box.betAmount;
+                    const betText = box.touched ? '+$' + (box.payout || box.betAmount * box.multiplier).toFixed(2) : '$' + box.betAmount.toFixed(2);
                     ctx.fillText(betText, cellCenterX, cellCenterY + 4 * scale);
                     
                     // Show status with animation
@@ -3645,12 +3668,10 @@
                 if (currentAddress) {
                     loadRealBalance();
                 } else if (realBalance === 0) {
-                    // Prompt to connect wallet and deposit
+                    // Show toast and open deposit modal
                     setTimeout(() => {
-                        const shouldDeposit = confirm('REAL MONEY MODE\n\nYour real balance is $0.00\n\nConnect wallet and deposit funds to start trading with real money?');
-                        if (shouldDeposit) {
-                            openDepositModal();
-                        }
+                        showToast('Real balance is $0.00 — Connect wallet and deposit to start trading', 'info');
+                        openDepositModal();
                     }, 100);
                 }
             }
@@ -3924,15 +3945,11 @@
         
         // Modal Functions
         function openDepositModal() {
-            // Prompt to switch to real mode if in demo
+            // Auto-switch to real mode if in demo
             if (!isRealMode) {
-                const switchMode = confirm('Deposits only work in REAL MONEY mode.\n\nSwitch to Real Money mode?');
-                if (switchMode) {
-                    document.getElementById('modeToggle').checked = true;
-                    toggleTradingMode();
-                } else {
-                    return;
-                }
+                showToast('Switching to Real Money mode for deposits', 'info');
+                document.getElementById('modeToggle').checked = true;
+                toggleTradingMode();
             }
             
             document.getElementById('depositModal').classList.add('show');
@@ -3976,18 +3993,8 @@
         }
         
         function showModalStatus(message, type) {
-            // Show toast notification
+            // Show toast notification only (bottom right corner)
             showToast(message, type);
-            
-            // Also update modal status if modal is open
-            const el = document.getElementById('modalStatus');
-            if (el) {
-                el.textContent = message;
-                el.className = 'modal-status-message show ' + type;
-                if (type === 'success') {
-                    setTimeout(() => el.classList.remove('show'), 5000);
-                }
-            }
         }
         
         function switchModalTab(tab) {
@@ -4262,7 +4269,6 @@
                 
                 console.log('Final token balance:', tokenBalance);
                 walletTokenBalance = tokenBalance;
-                document.getElementById('walletTokenBalance').textContent = tokenBalance.toFixed(2) + ' ' + selectedDepositToken;
                 
                 // Update wallet balance hint under amount input
                 const hintEl = document.getElementById('walletBalanceHint');
@@ -4277,7 +4283,8 @@
                 
             } catch (error) {
                 console.error('Balance check error:', error);
-                document.getElementById('walletTokenBalance').textContent = 'Error';
+                const hintEl = document.getElementById('walletBalanceHint');
+                if (hintEl) hintEl.classList.remove('show');
             }
         }
         
