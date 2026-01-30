@@ -540,23 +540,6 @@
             border-color: rgba(0, 255, 136, 0.5);
             box-shadow: 0 0 30px rgba(0, 255, 136, 0.1);
         }
-        .real-mode-banner {
-            display: none;
-            background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), rgba(0, 212, 255, 0.1));
-            border: 1px solid rgba(0, 255, 136, 0.3);
-            border-radius: 10px;
-            padding: 12px 20px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-size: 13px;
-            color: #00ff88;
-            animation: realModePulse 2s infinite;
-        }
-        .real-mode-banner.show { display: block; }
-        @keyframes realModePulse {
-            0%, 100% { border-color: rgba(0, 255, 136, 0.3); }
-            50% { border-color: rgba(0, 255, 136, 0.6); }
-        }
         
         .balance-mode-indicator {
             font-size: 9px;
@@ -1065,11 +1048,6 @@
         </section>
 
         <section class="trading-panel" id="tradingPanel">
-            <!-- Real Money Mode Banner -->
-            <div class="real-mode-banner" id="realModeBanner">
-                <strong>REAL MONEY MODE</strong> — You are trading with deposited funds. Trade responsibly!
-            </div>
-            
             <div class="balance-section">
                 <div class="balance-item" id="balanceItem">
                     <div class="balance-label">
@@ -3631,13 +3609,11 @@
             if (isRealMode) {
                 indicator.textContent = 'REAL';
                 indicator.className = 'balance-mode-indicator real';
-                document.getElementById('realModeBanner').classList.add('show');
                 document.getElementById('tradingPanel').classList.add('real-mode-active');
                 showToast('REAL MONEY MODE — You are trading with deposited funds. Trade responsibly!', 'warning');
             } else {
                 indicator.textContent = 'DEMO';
                 indicator.className = 'balance-mode-indicator demo';
-                document.getElementById('realModeBanner').classList.remove('show');
                 document.getElementById('tradingPanel').classList.remove('real-mode-active');
                 showToast('DEMO MODE — Trading with $10,000 virtual balance', 'info');
             }
@@ -3766,34 +3742,58 @@
         // Fallback balance loader (if game-actions not available)
         async function loadRealBalanceFallback() {
             try {
-                const depositsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
+                // First try to get balance from user_game_state table
+                const gameStateRes = await fetch(
+                    SUPABASE_URL + '/rest/v1/user_game_state?wallet_address=eq.' + currentAddress.toLowerCase() + '&select=balance,starting_balance,win_count,loss_count,pending_bets',
                     { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
                 );
-                const deposits = await depositsRes.json() || [];
+                const gameState = await gameStateRes.json();
                 
-                const withdrawalsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const withdrawals = await withdrawalsRes.json() || [];
-                
-                let totalDeposited = 0;
-                let totalWithdrawn = 0;
-                
-                deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
-                withdrawals.forEach(w => {
-                    if (w.status === 'completed' || w.status === 'approved' || w.status === 'pending') {
-                        totalWithdrawn += parseFloat(w.amount) || 0;
-                    }
-                });
-                
-                realBalance = Math.max(0, totalDeposited - totalWithdrawn);
-                realStartingBalance = realBalance;
+                if (gameState && gameState.length > 0 && gameState[0].balance !== null) {
+                    // Use the tracked balance from game state (includes wins/losses)
+                    realBalance = parseFloat(gameState[0].balance) || 0;
+                    realStartingBalance = parseFloat(gameState[0].starting_balance) || realBalance;
+                    realTotalWins = gameState[0].win_count || 0;
+                    realTotalLosses = gameState[0].loss_count || 0;
+                    realPendingBets = parseFloat(gameState[0].pending_bets) || 0;
+                    
+                    console.log('Loaded balance from user_game_state:', realBalance);
+                } else {
+                    // No game state exists yet - calculate from deposits/withdrawals
+                    const depositsRes = await fetch(
+                        SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
+                        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                    );
+                    const deposits = await depositsRes.json() || [];
+                    
+                    const withdrawalsRes = await fetch(
+                        SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
+                        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+                    );
+                    const withdrawals = await withdrawalsRes.json() || [];
+                    
+                    let totalDeposited = 0;
+                    let totalWithdrawn = 0;
+                    
+                    deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
+                    withdrawals.forEach(w => {
+                        if (w.status === 'completed' || w.status === 'approved' || w.status === 'pending') {
+                            totalWithdrawn += parseFloat(w.amount) || 0;
+                        }
+                    });
+                    
+                    realBalance = Math.max(0, totalDeposited - totalWithdrawn);
+                    realStartingBalance = realBalance;
+                    
+                    console.log('Loaded balance from deposits/withdrawals:', realBalance);
+                }
                 
                 if (isRealMode) {
                     balance = realBalance;
                     startingBalance = realStartingBalance;
+                    totalWins = realTotalWins || 0;
+                    totalLosses = realTotalLosses || 0;
+                    pendingBets = realPendingBets || 0;
                     updateBalanceDisplay();
                 }
             } catch (e) {
@@ -4333,29 +4333,9 @@
             if (!currentAddress) return;
             
             try {
-                const depositsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const deposits = await depositsRes.json() || [];
-                
-                const withdrawalsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const withdrawals = await withdrawalsRes.json() || [];
-                
-                let totalDeposited = 0;
-                let totalWithdrawn = 0;
-                
-                deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
-                withdrawals.forEach(w => {
-                    if (w.status !== 'rejected') {
-                        totalWithdrawn += parseFloat(w.amount) || 0;
-                    }
-                });
-                
-                const available = Math.max(0, totalDeposited - totalWithdrawn);
+                // The available balance for withdrawal is the current real game balance
+                // This already accounts for deposits, withdrawals, wins, and losses
+                const available = Math.max(0, realBalance);
                 document.getElementById('availableWithdrawBalance').textContent = '$' + available.toFixed(2);
                 
                 const withdrawAmount = parseFloat(document.getElementById('withdrawAmountInput').value) || 0;
