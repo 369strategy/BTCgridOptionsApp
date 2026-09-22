@@ -3189,59 +3189,155 @@
         }
 
         // WebSocket
+        // The futures stream can accept a connection - and even ACK a SUBSCRIBE -
+        // while never pushing a single message, when derivatives market data is
+        // withheld for the client's region/IP. A socket that is open but mute never
+        // fires onclose, so a close-based reconnect can't see it. Watch for silence,
+        // and fall back to futures REST (which keeps working) when it goes quiet.
+        let feedMode = 'none';       // 'ws' | 'rest' | 'none'
+        let lastTickAt = 0;
+        let wsWatchdog = null;
+        let restPollTimer = null;
+        let wsRetryTimer = null;
+
+        const WS_SILENCE_MS = 5000;  // open with no data this long => treat as mute
+        const REST_POLL_MS = 400;    // 150 req/min, weight 1 - well under the limit
+        const WS_RETRY_MS = 60000;   // re-test the stream while running on REST
+
+        function setFeedStatus(connected, label) {
+            statusDot.classList.toggle('connected', connected);
+            statusText.textContent = label;
+        }
+
+        // Single ingestion path, shared by the stream and the REST fallback.
+        function ingestPrice(newPrice) {
+            if (!newPrice || isNaN(newPrice) || newPrice <= 0) return;
+
+            lastTickAt = Date.now();
+            prevPrice = price;
+            price = newPrice;
+            if (!startPrice) startPrice = newPrice;
+
+            // Initialize displayPrice immediately on first data
+            if (displayPrice === null) displayPrice = newPrice;
+
+            // Use local time to avoid sync issues with exchange time
+            const localTime = Date.now();
+            priceHistory.push({time: localTime, price: newPrice});
+
+            // Keep 15 min of data for volatility calculation
+            const cutoff = localTime - 15 * 60 * 1000;
+            priceHistory = priceHistory.filter(d => d.time >= cutoff);
+
+            tradeCount++;
+            tradeCountEl.textContent = tradeCount.toLocaleString();
+            updatePriceDisplay();
+
+            // Check if price touches any locked boxes (use local time)
+            checkLockedBoxTouches(newPrice, localTime);
+        }
+
+        async function pollRestPrice() {
+            try {
+                const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+                ingestPrice(parseFloat(data.price));
+                setFeedStatus(true, 'Live (REST)');
+            } catch (e) {
+                console.error('REST price poll failed:', e);
+                setFeedStatus(false, 'Error');
+            }
+        }
+
+        function startRestFallback(reason) {
+            // Always re-arm the stream re-test, even if REST is already running.
+            clearTimeout(wsRetryTimer);
+            wsRetryTimer = setTimeout(connectWebSocket, WS_RETRY_MS);
+
+            if (feedMode === 'rest') return;
+            feedMode = 'rest';
+            console.warn('Binance futures stream ' + reason + ' - falling back to REST polling');
+            setFeedStatus(true, 'Live (REST)');
+
+            pollRestPrice();
+            clearInterval(restPollTimer);
+            restPollTimer = setInterval(pollRestPrice, REST_POLL_MS);
+        }
+
+        function stopRestFallback() {
+            clearInterval(restPollTimer);
+            restPollTimer = null;
+        }
+
         function connectWebSocket() {
+            clearTimeout(wsRetryTimer);
+
+            // Don't stack sockets if the retry fires while one is still alive.
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+                try { ws.onclose = null; ws.close(); } catch (e) {}
+            }
+
             ws = new WebSocket('wss://fstream.binance.com/ws/btcusdt@aggTrade');
-            
+            const thisWs = ws;
+            let gotData = false;
+
             ws.onopen = () => {
-                statusDot.classList.add('connected');
-                statusText.textContent = 'Live';
                 console.log('Connected to Binance Futures');
+
+                // An open socket is not a working feed - only a message proves that.
+                if (feedMode !== 'rest') setFeedStatus(false, 'Waiting for data...');
+
+                clearTimeout(wsWatchdog);
+                wsWatchdog = setTimeout(() => {
+                    if (gotData || thisWs !== ws) return;
+                    try { thisWs.onclose = null; thisWs.close(); } catch (e) {}
+                    startRestFallback('opened but sent no data in ' + (WS_SILENCE_MS / 1000) + 's');
+                }, WS_SILENCE_MS);
             };
-            
+
             ws.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 const newPrice = parseFloat(data.p);
-                
+
                 // Skip invalid data
                 if (!newPrice || isNaN(newPrice) || newPrice <= 0) {
                     console.log('Invalid price data:', data);
                     return;
                 }
-                
-                prevPrice = price;
-                price = newPrice;
-                if (!startPrice) startPrice = newPrice;
-                
-                // Initialize displayPrice immediately on first data
-                if (displayPrice === null) displayPrice = newPrice;
-                
-                // Use local time to avoid sync issues with exchange time
-                const localTime = Date.now();
-                priceHistory.push({time: localTime, price: newPrice});
-                
-                // Keep 15 min of data for volatility calculation
-                const cutoff = Date.now() - 15 * 60 * 1000;
-                priceHistory = priceHistory.filter(d => d.time >= cutoff);
-                
-                tradeCount++;
-                tradeCountEl.textContent = tradeCount.toLocaleString();
-                updatePriceDisplay();
-                
-                // Check if price touches any locked boxes (use local time)
-                checkLockedBoxTouches(newPrice, localTime);
+
+                if (!gotData) {
+                    gotData = true;
+                    clearTimeout(wsWatchdog);
+                    if (feedMode === 'rest') {
+                        console.log('Futures stream recovered - leaving REST fallback');
+                    }
+                    stopRestFallback();
+                    feedMode = 'ws';
+                    setFeedStatus(true, 'Live');
+                }
+
+                ingestPrice(newPrice);
             };
-            
+
             ws.onerror = () => {
-                statusDot.classList.remove('connected');
-                statusText.textContent = 'Error';
+                if (feedMode !== 'rest') setFeedStatus(false, 'Error');
             };
-            
+
             ws.onclose = () => {
-                statusDot.classList.remove('connected');
-                statusText.textContent = 'Reconnecting...';
+                clearTimeout(wsWatchdog);
+                if (thisWs !== ws) return;
+                if (feedMode === 'rest') return;  // REST is already carrying the app
+                feedMode = 'none';
+                setFeedStatus(false, 'Reconnecting...');
                 setTimeout(connectWebSocket, 3000);
             };
         }
+
+        // Last resort: if nothing has produced a tick shortly after boot, force REST.
+        setTimeout(() => {
+            if (!lastTickAt) startRestFallback('never delivered a tick');
+        }, WS_SILENCE_MS + 2000);
         
         // Check if current price touches any locked boxes
         function checkLockedBoxTouches(currentPrice, currentTime) {
