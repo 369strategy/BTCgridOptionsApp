@@ -1234,7 +1234,7 @@
                 <div class="wallet-section">
                     <div class="wallet-status" id="walletStatusConnected" style="display: none;">
                         <div class="wallet-info">
-                            <img class="connected-wallet-logo" id="connectedWalletLogo" src="assets/logos/phantom.svg" alt="Wallet" width="20" height="20" onerror="logoFallback(this)">
+                            <img class="connected-wallet-logo" id="connectedWalletLogo" src="assets/logos/phantom.png" alt="Wallet" width="20" height="20" onerror="logoFallback(this)">
                             <div class="modal-status-dot"></div>
                             <span class="wallet-address" id="connectedWalletAddress">...</span>
                         </div>
@@ -1247,15 +1247,15 @@
                         <div class="wallet-options" id="walletOptions">
                             <div class="wallet-group-label">Solana</div>
                             <button class="wallet-option-btn" onclick="connectWallet('phantom')">
-                                <img src="assets/logos/phantom.svg" alt="Phantom" width="28" height="28" onerror="logoFallback(this)">
+                                <img src="assets/logos/phantom.png" alt="Phantom" width="28" height="28" onerror="logoFallback(this)">
                                 <span>Phantom</span>
                             </button>
                             <button class="wallet-option-btn" onclick="connectWallet('solflare')">
-                                <img src="assets/logos/solflare.svg" alt="Solflare" width="28" height="28" onerror="logoFallback(this)">
+                                <img src="assets/logos/solflare.png" alt="Solflare" width="28" height="28" onerror="logoFallback(this)">
                                 <span>Solflare</span>
                             </button>
                             <button class="wallet-option-btn" onclick="connectWallet('backpack')">
-                                <img src="assets/logos/backpack.svg" alt="Backpack" width="28" height="28" onerror="logoFallback(this)">
+                                <img src="assets/logos/backpack.png" alt="Backpack" width="28" height="28" onerror="logoFallback(this)">
                                 <span>Backpack</span>
                             </button>
                             <div class="wallet-group-label">EVM</div>
@@ -1265,7 +1265,7 @@
                                 <span class="soon-badge">Coming soon</span>
                             </button>
                             <button class="wallet-option-btn soon" onclick="comingSoon('Rabby')" aria-disabled="true">
-                                <img src="assets/logos/rabby.svg" alt="Rabby" width="28" height="28" onerror="logoFallback(this)">
+                                <img src="assets/logos/rabby.png" alt="Rabby" width="28" height="28" onerror="logoFallback(this)">
                                 <span>Rabby</span>
                                 <span class="soon-badge">Coming soon</span>
                             </button>
@@ -1290,11 +1290,11 @@
                             Arbitrum <span class="soon-badge">Soon</span>
                         </button>
                         <button class="chain-btn soon" data-chain="base" onclick="selectChain('base')" aria-disabled="true">
-                            <img src="assets/logos/base.svg" alt="Base" width="20" height="20" onerror="logoFallback(this)">
+                            <img src="assets/logos/base.png" alt="Base" width="20" height="20" onerror="logoFallback(this)">
                             Base <span class="soon-badge">Soon</span>
                         </button>
                         <button class="chain-btn soon" data-chain="hyperliquid" onclick="selectChain('hyperliquid')" aria-disabled="true">
-                            <img src="assets/logos/hyperliquid.svg" alt="Hyperliquid" width="20" height="20" onerror="logoFallback(this)">
+                            <img src="assets/logos/hyperliquid.png" alt="Hyperliquid" width="20" height="20" onerror="logoFallback(this)">
                             Hyperliquid <span class="soon-badge">Soon</span>
                         </button>
                     </div>
@@ -4329,7 +4329,7 @@
                 const logo = document.getElementById('connectedWalletLogo');
                 logo.onerror = () => logoFallback(logo);
                 logo.alt = def.name;
-                logo.src = 'assets/logos/' + type + '.svg';
+                logo.src = 'assets/logos/' + type + '.png';
                 document.getElementById('walletOptions').classList.remove('show');
                 document.getElementById('walletMainBtn').classList.add('connected');
                 document.getElementById('walletMainText').textContent = short;
