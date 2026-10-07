@@ -995,7 +995,7 @@
                 <div class="logo-icon">₿</div>
                 <div class="logo-text">
                     <h1 id="feedLabel">BTC/USDT</h1>
-                    <span>60s TWAP • EMA VOLATILITY + JUMP DIFFUSION • 5K PATHS</span>
+                    <span>15s TWAP • EMA VOLATILITY + JUMP DIFFUSION • 5K PATHS</span>
                 </div>
             </div>
             <div class="header-right">
@@ -1037,12 +1037,12 @@
 
         <section class="price-section">
             <div class="main-price">
-                <div class="price-label">BTC Price · 60s TWAP</div>
+                <div class="price-label">BTC Price · 15s TWAP</div>
                 <div class="price-value" id="currentPrice">$--,---.--</div>
                 <div class="price-change">
                     <span class="change-badge positive" id="priceChange">+0.00%</span>
                     <span style="color: #8888aa; font-size: 14px;" id="priceChangeAbs">$0.00</span>
-                    <span style="color: #666680; font-size: 12px; margin-left: 8px;" id="livePrice" title="Latest Binance trade. Bets are decided on the 60-second TWAP, not on single trades."></span>
+                    <span style="color: #666680; font-size: 12px; margin-left: 8px;" id="livePrice" title="Latest Binance trade. Bets are decided on the 15-second TWAP, not on single trades."></span>
                 </div>
             </div>
             <div class="stats-grid">
@@ -1178,10 +1178,10 @@
 
         <div class="chart-container">
             <div class="chart-header">
-                <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> • 60s TWAP • 10 sec × $10 • Full View</h2>
+                <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> • 15s TWAP • 10 sec × $10 • Full View</h2>
                 <div class="chart-legend">
                     <div class="legend-item">
-                        <span style="width:12px;height:3px;background:#00d4ff;border-radius:2px;"></span> 60s TWAP
+                        <span style="width:12px;height:3px;background:#00d4ff;border-radius:2px;"></span> 15s TWAP
                     </div>
                     <div class="legend-item">
                         <span style="width:12px;height:2px;background:rgba(255,255,255,0.35);border-radius:2px;"></span> Live trades
@@ -1401,13 +1401,13 @@
         let startPrice = null;
         let priceHistory = [];          // live Binance trades (faint line + volatility)
 
-        // ---------- 60-second TWAP: the game's price ----------
+        // ---------- 15-second TWAP: the game's price ----------
         // Each second is one bucket: the time-weighted average of the trade price
         // in that second. The TWAP published at second boundary T is the mean of
-        // the 60 buckets covering [T-60s, T). The server publishes the official
+        // the 15 buckets covering [T-15s, T). The server publishes the official
         // points; this local copy (same algorithm) feeds the demo's odds and is
         // the price when the server is unreachable.
-        const TWAP_WINDOW_S = 60;
+        const TWAP_WINDOW_S = 15;
         let twapHistory = [];           // [{time, price}] one point per second
         let twapPrice = null;
         let twapFromServer = false;
@@ -2389,7 +2389,7 @@
             return estimatedJumpParams;
         }
 
-        // Monte Carlo simulation of the 60s TWAP (demo odds; real-money odds come
+        // Monte Carlo simulation of the 15s TWAP (demo odds; real-money odds come
         // from the server, which runs the same model). Each path simulates the
         // live price per second, turns it into buckets like localTwap, and rolls
         // the 60-bucket average forward from the buckets that already happened.
@@ -2725,7 +2725,7 @@
                 ctx.stroke();
             }
 
-            // The game price: the 60s TWAP (one point per second), extended to NOW.
+            // The game price: the 15s TWAP (one point per second), extended to NOW.
             const recentHistory = twapHistory.filter(d => d.time >= timeStart - 1000 && d.time <= now);
             if (recentHistory.length && twapPrice !== null) recentHistory.push({ time: now, price: twapPrice });
 
@@ -3412,7 +3412,7 @@
             }
         }
 
-        // A published 60s TWAP point: the game's price moves, demo bets settle.
+        // A published 15s TWAP point: the game's price moves, demo bets settle.
         function onTwapPoint(t, v) {
             if (twapHistory.length && t <= twapHistory[twapHistory.length - 1].time) return;
             twapHistory.push({ time: t, price: v });

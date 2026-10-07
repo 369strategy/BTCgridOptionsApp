@@ -92,7 +92,7 @@ const Bet = sequelize.define('Bet', {
   feedSource: { type: DataTypes.STRING, allowNull: false },
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'open' }, // open|won|lost|void
   payout: { type: MONEY },
-  // Settlement evidence (60s TWAP values): the point that touched the cell, or
+  // Settlement evidence (15s TWAP values): the point that touched the cell, or
   // the range of the column's points.
   touchPrice: { type: DataTypes.DECIMAL(20, 6) },
   touchAt: { type: DataTypes.BIGINT },

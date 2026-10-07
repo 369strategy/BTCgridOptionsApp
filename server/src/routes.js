@@ -33,7 +33,7 @@ router.use(byIp(600));
 router.get('/health', (req, res) => {
   res.json({
     ok: true,
-    feed: { source: feed.source, label: feed.label, live: feed.isLive(), price: feed.price, twap60s: twap.value, ticks: feed.tickCount },
+    feed: { source: feed.source, label: feed.label, live: feed.isLive(), price: feed.price, twap: twap.value, twapWindowS: config.GAME.TWAP_WINDOW_S, ticks: feed.tickCount },
     vaultConfigured: !!solana.vaultPubkey(),
     flags: game.flags,
     serverTime: Date.now(),

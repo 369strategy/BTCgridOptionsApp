@@ -1,4 +1,4 @@
-// Server-side odds on the 60-second TWAP. The live-price model is the one the
+// Server-side odds on the 15-second TWAP. The live-price model is the one the
 // browser used before the merge (EMA volatility with a 1.1x buffer + Merton
 // jump diffusion, 5,000 paths, 1-second steps); each path is then averaged
 // exactly like twap.js. A bet is always priced off a simulation no older than
@@ -109,7 +109,7 @@ function multiplierFor(prob) {
 const cellKey = (cellTs, level) => `${cellTs}_${level}`;
 
 /**
- * Touch probabilities of the 60-second TWAP for the next HORIZON_CELLS
+ * Touch probabilities of the 15-second TWAP for the next HORIZON_CELLS
  * columns and 2*LEVELS_EACH_SIDE+1 rows around the current TWAP.
  *
  * Each path simulates the live price second by second (same volatility and
@@ -119,7 +119,7 @@ const cellKey = (cellTs, level) => `${cellTs}_${level}`;
  * decided; pricing it in exactly is what keeps the odds fair.
  *
  * A TWAP point is published at every second boundary T (mean of buckets
- * covering [T-60s, T)); a cell is touched if a point with T inside its column
+ * covering [T-15s, T)); a cell is touched if a point with T inside its column
  * lands in its $10 band — the same rule game.js settles with.
  */
 function simulate() {

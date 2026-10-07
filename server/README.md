@@ -11,13 +11,13 @@ Runs on Railway (project `btc-grid`, service `btc-grid`, Postgres), serves
 - **Price feed** — one continuous Binance trade stream (futures first; if it is
   silent from the server's region it switches to spot for the process lifetime),
   plus the best bid/ask stream as a heartbeat so quiet markets aren't outages.
-- **The game's price is a 60-second TWAP** (`src/twap.js`): each second is the
+- **The game's price is a 15-second TWAP** (`src/twap.js`): each second is the
   time-weighted average trade price of that second, and the TWAP published at
-  every second boundary is the mean of the last 60. A one-trade spike counts for
-  a sliver of 1/60, so it can't touch a cell. Odds, results and the chart line
+  every second boundary is the mean of the last 15. A one-trade spike counts for
+  a sliver of 1/15, so it can't touch a cell. Odds, results and the chart line
   all use exactly these published points; live trades are shown as a faint line.
 - **Odds** — the browser's old Monte Carlo model, now on the server and run on
-  the TWAP: each path simulates the live price and rolls the 60-second average
+  the TWAP: each path simulates the live price and rolls the 15-second average
   forward from the seconds that already happened, so near columns (mostly
   decided) are priced correctly. Calibrated against hours of real Binance data.
   Bets are priced off a simulation at most 500ms old; a player is filled at
@@ -25,9 +25,9 @@ Runs on Railway (project `btc-grid`, service `btc-grid`, Postgres), serves
 - **Bets** — need a wallet-signed session. The server checks timing (column must
   start ≥10s out), stake limits, the player's balance, and house exposure, and
   settles every bet from its own TWAP points, storing the touching point (wins)
-  or the column's TWAP range (losses) as evidence. A feed outage in the 60s
+  or the column's TWAP range (losses) as evidence. A feed outage in the 15s
   before a column or during it voids (refunds) its bets, and such bets are
-  refused upfront — including for ~70s after every server restart.
+  refused upfront — including for ~25s after every server restart.
 - **Money** (ported from perfect-nature / User-Gacha) — double-entry ledger,
   on-chain deposit verification with a required memo, replay guard, background
   finalizer + reconciler, and withdrawals that reserve first, then refund only
