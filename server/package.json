@@ -1,0 +1,30 @@
+{
+  "name": "btc-grid-server",
+  "private": true,
+  "description": "Server-authoritative backend for the BTC options grid: Binance price feed, odds, bet settlement, Solana USDC deposits/withdrawals",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "selftest": "node scripts/selftest.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "1.98.4",
+    "bs58": "^5.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "pg": "^8.13.1",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.5",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "sqlite3": "^5.1.7"
+  }
+}

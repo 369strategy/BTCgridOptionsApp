@@ -819,6 +819,23 @@
             background: rgba(0, 212, 255, 0.1);
         }
         .wallet-option-btn img { width: 28px; height: 28px; border-radius: 6px; }
+        .wallet-group-label {
+            font-size: 10px; color: #666; text-transform: uppercase;
+            letter-spacing: 1px; margin: 6px 2px 0;
+        }
+        .soon-badge {
+            margin-left: auto; font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+            padding: 3px 6px; border-radius: 4px; white-space: nowrap;
+            background: rgba(255, 200, 0, 0.12); color: #ffc800;
+            border: 1px solid rgba(255, 200, 0, 0.3);
+        }
+        .chain-btn .soon-badge { margin-left: 2px; padding: 2px 4px; }
+        .chain-btn.soon, .wallet-option-btn.soon { opacity: 0.45; cursor: not-allowed; }
+        .chain-btn.soon:hover, .wallet-option-btn.soon:hover {
+            border-color: #2a2a3a; background: #1a1a2e; color: #8888aa;
+        }
+        .connected-wallet-logo { width: 20px; height: 20px; border-radius: 5px; }
+        .house-edge-slider:disabled { opacity: 0.4; cursor: not-allowed; }
         
         .modal-status-message {
             padding: 12px 16px; border-radius: 8px;
@@ -977,7 +994,7 @@
             <div class="logo">
                 <div class="logo-icon">₿</div>
                 <div class="logo-text">
-                    <h1>BTC/USDT PERP</h1>
+                    <h1 id="feedLabel">BTC/USDT</h1>
                     <span>EMA VOLATILITY + JUMP DIFFUSION • 5K PATHS</span>
                 </div>
             </div>
@@ -1160,7 +1177,7 @@
 
         <div class="chart-container">
             <div class="chart-header">
-                <h2 class="chart-title">BTC-USDT Perp • 10 sec × $10 • Full View</h2>
+                <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> • 10 sec × $10 • Full View</h2>
                 <div class="chart-legend">
                     <div class="legend-item">
                         <span style="width:12px;height:3px;background:#00d4ff;border-radius:2px;"></span> Price
@@ -1192,7 +1209,7 @@
         </div>
 
         <footer class="footer">
-            DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • 50% House Edge • Click or Drag to select cells
+            DEMO MODE • Binance • EMA Vol (60s) + Jumps • 50% House Edge • Click or Drag to select cells
         </footer>
     </div>
 
@@ -1208,13 +1225,14 @@
             <div class="modal-body">
                 <!-- Status Message -->
                 <div class="modal-status-message" id="modalStatus"></div>
-                
+
                 <!-- Wallet Connection -->
                 <div class="wallet-section">
                     <div class="wallet-status" id="walletStatusConnected" style="display: none;">
                         <div class="wallet-info">
+                            <img class="connected-wallet-logo" id="connectedWalletLogo" src="assets/logos/phantom.svg" alt="Wallet" width="20" height="20" onerror="logoFallback(this)">
                             <div class="modal-status-dot"></div>
-                            <span class="wallet-address" id="connectedWalletAddress">0x...</span>
+                            <span class="wallet-address" id="connectedWalletAddress">...</span>
                         </div>
                         <button class="disconnect-modal-btn" onclick="disconnectWallet()">Disconnect</button>
                     </div>
@@ -1223,67 +1241,79 @@
                             🔗 Connect Wallet
                         </button>
                         <div class="wallet-options" id="walletOptions">
-                            <button class="wallet-option-btn" onclick="connectWallet('metamask')">
-                                <img src="https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg" alt="MetaMask">
-                                <span>MetaMask</span>
-                            </button>
-                            <button class="wallet-option-btn" onclick="connectWallet('rabby')">
-                                <img src="https://rabby.io/assets/images/logo.svg" alt="Rabby">
-                                <span>Rabby</span>
-                            </button>
+                            <div class="wallet-group-label">Solana</div>
                             <button class="wallet-option-btn" onclick="connectWallet('phantom')">
-                                <img src="https://phantom.app/img/phantom-logo.svg" alt="Phantom">
-                                <span>Phantom (Solana)</span>
+                                <img src="assets/logos/phantom.svg" alt="Phantom" width="28" height="28" onerror="logoFallback(this)">
+                                <span>Phantom</span>
+                            </button>
+                            <button class="wallet-option-btn" onclick="connectWallet('solflare')">
+                                <img src="assets/logos/solflare.svg" alt="Solflare" width="28" height="28" onerror="logoFallback(this)">
+                                <span>Solflare</span>
+                            </button>
+                            <button class="wallet-option-btn" onclick="connectWallet('backpack')">
+                                <img src="assets/logos/backpack.svg" alt="Backpack" width="28" height="28" onerror="logoFallback(this)">
+                                <span>Backpack</span>
+                            </button>
+                            <div class="wallet-group-label">EVM</div>
+                            <button class="wallet-option-btn soon" onclick="comingSoon('MetaMask')" aria-disabled="true">
+                                <img src="assets/logos/metamask.svg" alt="MetaMask" width="28" height="28" onerror="logoFallback(this)">
+                                <span>MetaMask</span>
+                                <span class="soon-badge">Coming soon</span>
+                            </button>
+                            <button class="wallet-option-btn soon" onclick="comingSoon('Rabby')" aria-disabled="true">
+                                <img src="assets/logos/rabby.svg" alt="Rabby" width="28" height="28" onerror="logoFallback(this)">
+                                <span>Rabby</span>
+                                <span class="soon-badge">Coming soon</span>
                             </button>
                         </div>
                     </div>
                 </div>
-                
-                <!-- Chain Selector -->
+
+                <!-- Network Selector -->
                 <div class="modal-form-group">
                     <label>Network</label>
                     <div class="chain-selector">
-                        <button class="chain-btn active" data-chain="ethereum" onclick="selectChain('ethereum')">
-                            <img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH">
-                            Ethereum
-                        </button>
-                        <button class="chain-btn" data-chain="arbitrum" onclick="selectChain('arbitrum')">
-                            <img src="https://cryptologos.cc/logos/arbitrum-arb-logo.png" alt="ARB">
-                            Arbitrum
-                        </button>
-                        <button class="chain-btn" data-chain="base" onclick="selectChain('base')">
-                            <img src="https://avatars.githubusercontent.com/u/108554348" alt="Base">
-                            Base
-                        </button>
-                        <button class="chain-btn" data-chain="solana" onclick="selectChain('solana')">
-                            <img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL">
+                        <button class="chain-btn active" data-chain="solana" onclick="selectChain('solana')">
+                            <img src="assets/logos/solana.svg" alt="Solana" width="20" height="20" onerror="logoFallback(this)">
                             Solana
+                        </button>
+                        <button class="chain-btn soon" data-chain="ethereum" onclick="selectChain('ethereum')" aria-disabled="true">
+                            <img src="assets/logos/ethereum.svg" alt="Ethereum" width="20" height="20" onerror="logoFallback(this)">
+                            Ethereum <span class="soon-badge">Soon</span>
+                        </button>
+                        <button class="chain-btn soon" data-chain="arbitrum" onclick="selectChain('arbitrum')" aria-disabled="true">
+                            <img src="assets/logos/arbitrum.svg" alt="Arbitrum" width="20" height="20" onerror="logoFallback(this)">
+                            Arbitrum <span class="soon-badge">Soon</span>
+                        </button>
+                        <button class="chain-btn soon" data-chain="base" onclick="selectChain('base')" aria-disabled="true">
+                            <img src="assets/logos/base.svg" alt="Base" width="20" height="20" onerror="logoFallback(this)">
+                            Base <span class="soon-badge">Soon</span>
+                        </button>
+                        <button class="chain-btn soon" data-chain="hyperliquid" onclick="selectChain('hyperliquid')" aria-disabled="true">
+                            <img src="assets/logos/hyperliquid.svg" alt="Hyperliquid" width="20" height="20" onerror="logoFallback(this)">
+                            Hyperliquid <span class="soon-badge">Soon</span>
                         </button>
                     </div>
                 </div>
-                
+
                 <!-- Tabs -->
                 <div class="modal-tabs">
                     <button class="modal-tab active" id="depositTabBtn" onclick="switchModalTab('deposit')">Deposit</button>
                     <button class="modal-tab" id="withdrawTabBtn" onclick="switchModalTab('withdraw')">Withdraw</button>
                 </div>
-                
+
                 <!-- Deposit Form -->
                 <div id="depositFormModal">
                     <div class="modal-form-group">
                         <label>Token</label>
                         <div class="token-selector">
-                            <button class="token-btn active" data-token="USDC" onclick="selectDepositToken('USDC')">
-                                <img src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC">
+                            <button class="token-btn active" data-token="USDC">
+                                <img src="assets/logos/usdc.svg" alt="USDC" width="24" height="24" onerror="logoFallback(this)">
                                 USDC
-                            </button>
-                            <button class="token-btn" data-token="USDT" onclick="selectDepositToken('USDT')">
-                                <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT">
-                                USDT
                             </button>
                         </div>
                     </div>
-                    
+
                     <div class="modal-form-group">
                         <label>Amount</label>
                         <div class="input-with-max">
@@ -1294,63 +1324,50 @@
                             Wallet balance: <span id="walletBalanceHintValue">0.00 USDC</span>
                         </div>
                     </div>
-                    
+
                     <button class="action-btn" id="depositActionBtn" onclick="executeDeposit()" disabled>
                         Deposit
                     </button>
-                    
+
                     <div class="modal-info-box">
-                        Deposits are verified on-chain and credited automatically. Make sure you're on the correct network.
+                        USDC on Solana only. Your deposit is verified on-chain and credited automatically once Solana finalizes it (~30 seconds), even if you close this page. Keep a little SOL for network fees.
                     </div>
                 </div>
-                
+
                 <!-- Withdraw Form -->
                 <div id="withdrawFormModal" style="display: none;">
-                    <!-- Verification Section -->
-                    <div class="verification-section" id="verificationSection">
-                        <div class="verification-status" id="verificationStatus">
-                            Please verify wallet ownership to request withdrawals
+                    <div class="modal-form-group">
+                        <label>Token</label>
+                        <div class="token-selector">
+                            <button class="token-btn active" data-token="USDC">
+                                <img src="assets/logos/usdc.svg" alt="USDC" width="24" height="24" onerror="logoFallback(this)">
+                                USDC
+                            </button>
                         </div>
-                        <button class="verify-btn" id="verifyBtn" onclick="verifyWallet()">
-                            Sign Message to Verify
-                        </button>
                     </div>
-                    
-                    <div id="withdrawFormFields" style="display: none;">
-                        <div class="modal-form-group">
-                            <label>Token</label>
-                            <div class="token-selector">
-                                <button class="token-btn active" data-token="USDC" onclick="selectWithdrawToken('USDC')">
-                                    <img src="https://cryptologos.cc/logos/usd-coin-usdc-logo.png" alt="USDC">
-                                    USDC
-                                </button>
-                                <button class="token-btn" data-token="USDT" onclick="selectWithdrawToken('USDT')">
-                                    <img src="https://cryptologos.cc/logos/tether-usdt-logo.png" alt="USDT">
-                                    USDT
-                                </button>
-                            </div>
-                        </div>
-                        
-                        <div class="modal-balance-display">
-                            <span class="modal-balance-label">Available Balance</span>
-                            <span class="modal-balance-value" id="availableWithdrawBalance">$0.00</span>
-                        </div>
-                        
-                        <div class="modal-form-group">
-                            <label>Amount</label>
+
+                    <div class="modal-balance-display">
+                        <span class="modal-balance-label">Available Balance</span>
+                        <span class="modal-balance-value" id="availableWithdrawBalance">$0.00</span>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label>Amount</label>
+                        <div class="input-with-max">
                             <input type="number" class="modal-form-input" id="withdrawAmountInput" placeholder="0.00" step="0.01" min="1">
+                            <button class="max-btn" onclick="setMaxWithdraw()">MAX</button>
                         </div>
-                        
-                        <button class="action-btn withdraw-action" id="withdrawActionBtn" onclick="executeWithdraw()" disabled>
-                            Request Withdrawal
-                        </button>
-                        
-                        <div class="modal-info-box">
-                            Withdrawals are processed manually within 24-48 hours. Funds will be sent to your connected wallet.
-                        </div>
+                    </div>
+
+                    <button class="action-btn withdraw-action" id="withdrawActionBtn" onclick="executeWithdraw()" disabled>
+                        Withdraw to my wallet
+                    </button>
+
+                    <div class="modal-info-box">
+                        Paid in USDC on Solana to your connected wallet, usually within seconds. Your wallet will ask you to sign a message confirming the exact amount (free, no transaction).
                     </div>
                 </div>
-                
+
                 <!-- History Section -->
                 <div class="history-section" id="historySection" style="display: none;">
                     <h3 class="history-title">Recent Transactions</h3>
@@ -1363,6 +1380,17 @@
     </div>
 
     <script>
+        // ================================================
+        // SERVER (Railway): price feed, odds, real-money bets
+        // ================================================
+        // Same origin when served by the Railway app; GitHub Pages calls it cross-origin.
+        const RAILWAY_URL = 'https://btc-grid-production.up.railway.app';
+        const API_BASE = location.hostname.endsWith('github.io') ? RAILWAY_URL : '';
+        // Columns, bet cutoffs and settlement run on the SERVER clock, so every
+        // timestamp on this page uses serverNow() (offset synced in syncClock).
+        let serverOffset = 0;
+        function serverNow() { return Date.now() + serverOffset; }
+
         // State
         let price = null;
         let prevPrice = null;
@@ -1512,7 +1540,7 @@
             // Update footer only in demo mode
             const footer = document.querySelector('.footer');
             if (footer && (typeof isRealMode === 'undefined' || !isRealMode)) {
-                footer.innerHTML = 'DEMO MODE • Binance Perpetuals • EMA Vol (60s) + Jumps • ' + value + '% House Edge • Click or Drag to select cells';
+                footer.innerHTML = 'DEMO MODE • ' + escapeHtml(feedLabel) + ' • EMA Vol (60s) + Jumps • ' + value + '% House Edge • Click or Drag to select cells';
             }
             console.log('House edge set to ' + value + '%');
         }
@@ -1603,7 +1631,7 @@
         function getPatternCellKeys() {
             if (!price) return [];
             
-            const now = Date.now();
+            const now = serverNow();
             const msPerCell = 10000;
             const pricePerCell = 10;
             const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
@@ -1684,7 +1712,7 @@
             // No pattern selected - nothing to show
             if (!autoBetPattern) return;
             
-            const now = Date.now();
+            const now = serverNow();
             
             if (autoBetPattern === 'threshold') {
                 // Threshold pattern: show ALL cells that meet minimum multiplier
@@ -1722,7 +1750,7 @@
         function runAutoBet() {
             if (!autoBetEnabled || !price || !autoBetPattern) return;
             
-            const now = Date.now();
+            const now = serverNow();
             const msPerCell = 10000;
             let betsPlaced = 0;
             
@@ -1782,7 +1810,7 @@
         
         // Clean up old entries from autoBetLocked periodically
         function cleanAutoBetLocked() {
-            const now = Date.now();
+            const now = serverNow();
             for (const key of autoBetLocked) {
                 const [ts] = key.split('_');
                 const cellTs = parseInt(ts);
@@ -2005,7 +2033,7 @@
             const cellStart = Math.floor(clickTime / msPerCell) * msPerCell;
             const priceLevel = Math.floor(clickPrice / pricePerCell) * pricePerCell;
             
-            const currentNow = Date.now();
+            const currentNow = serverNow();
             const timeUntilStart = cellStart - currentNow;
             
             // Only allow future cells with more than 10 seconds until start
@@ -2020,12 +2048,15 @@
             // Already locked?
             if (lockedBoxes[key]) return false;
             
+            // Real money: the server decides (odds, limits, balance).
+            if (isRealMode) return queueRealBet(key);
+            
             // Get multiplier data
             const multiplierData = gridMultipliers[key];
             if (!multiplierData) return false;
             
             // Calculate adjusted multiplier
-            const adjustedMult = getAdjustedMultiplier(multiplierData, Date.now(), price);
+            const adjustedMult = getAdjustedMultiplier(multiplierData, serverNow(), price);
             
             // Check balance
             if (betSize > balance) {
@@ -2053,22 +2084,11 @@
                 priceLevel: multiplierData.priceLevel,
                 touched: false,
                 expired: false,
-                lockedAt: Date.now(),
-                betAmount: betSize,
-                isRealBet: typeof isRealMode !== 'undefined' && isRealMode  // Track if this was a real money bet
+                lockedAt: serverNow(),
+                betAmount: betSize
             };
-            
-            // Save to database if real mode
-            if (typeof isRealMode !== 'undefined' && isRealMode) {
-                saveBetToDatabase(key, lockedBoxes[key]).then(betId => {
-                    if (betId) {
-                        lockedBoxes[key].dbBetId = betId;
-                    }
-                });
-            }
-            
-            const modeTag = (typeof isRealMode !== 'undefined' && isRealMode) ? '[REAL]' : '[DEMO]';
-            console.log(modeTag, 'Bet placed:', key, 'Amount: $' + betSize, 'Multiplier:', adjustedMult.toFixed(2) + 'x');
+
+            console.log('[DEMO] Bet placed:', key, 'Amount: $' + betSize, 'Multiplier:', adjustedMult.toFixed(2) + 'x');
             return true;
         }
         
@@ -2131,7 +2151,7 @@
         function calculateVolatility() {
             if (priceHistory.length < 50) return 0.9; // Default 90% annualized
             
-            const now = Date.now();
+            const now = serverNow();
             const halfLife = 60000; // 60 seconds half-life
             const decayRate = Math.LN2 / halfLife;
             const sampleInterval = 100; // 100ms between samples
@@ -2215,7 +2235,7 @@
         function estimateJumpParameters() {
             if (priceHistory.length < 100) return estimatedJumpParams;
             
-            const now = Date.now();
+            const now = serverNow();
             const halfLife = 5000; // 5 seconds half-life for jump detection
             const decayRate = Math.LN2 / halfLife;
             
@@ -2287,6 +2307,7 @@
         // Monte Carlo simulation - tracks if price TOUCHES each cell during the minute
         function runMonteCarloSimulation() {
             if (!price || simulationRunning) return;
+            if (isRealMode) return; // real-money odds come from the server
             simulationRunning = true;
 
             const NUM_PATHS = 5000;
@@ -2302,7 +2323,7 @@
             
             const pricePerCell = 10; // $10 per cell
             const msPerCell = 10000; // 10 seconds per cell
-            const now = Date.now();
+            const now = serverNow();
             
             // Calculate time until each future cell boundary (10-second intervals)
             const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
@@ -2438,6 +2459,8 @@
 
         // Adjust multiplier for time decay AND price movement (O(1) - minimal CPU)
         function getAdjustedMultiplier(data, currentNow, currentPrice) {
+            // Real money: the server's quote, as-is.
+            if (data.serverMult) return data.serverMult;
             const originalSecs = (data.cellTs - data.simTime) / 1000;
             const currentSecs = Math.max(0.1, (data.cellTs - currentNow) / 1000);
             
@@ -2531,7 +2554,7 @@
             // Grid config
             const pricePerCell = 10; // $10 per cell
             const msPerCell = 10000; // 10 seconds per cell
-            const now = Date.now();
+            const now = serverNow();
             
             // Time range: 30s past to 2 min future (shows all simulated cells)
             const pastRange = 30000;   // 30 seconds past
@@ -2701,8 +2724,8 @@
             
             // Current price dot with smooth pulse
             if (price) {
-                const pulse = Math.sin(Date.now() / 300) * 0.15 + 1;
-                const glowPulse = Math.sin(Date.now() / 500) * 0.1 + 0.2;
+                const pulse = Math.sin(serverNow() / 300) * 0.15 + 1;
+                const glowPulse = Math.sin(serverNow() / 500) * 0.1 + 0.2;
                 
                 // Outer glow
                 ctx.beginPath();
@@ -2808,7 +2831,7 @@
                     
                     // Draw drag selection border (pulsing cyan)
                     if (isDragSelected && !isClosingSoon) {
-                        const pulse = Math.sin(Date.now() / 150) * 0.2 + 0.8;
+                        const pulse = Math.sin(serverNow() / 150) * 0.2 + 0.8;
                         ctx.strokeStyle = `rgba(0, 220, 255, ${pulse})`;
                         ctx.lineWidth = 3;
                         ctx.setLineDash([5, 3]);
@@ -2817,7 +2840,7 @@
                     }
                     // Draw pattern cell border (pulsing orange)
                     else if (isPatternCell && !isClosingSoon) {
-                        const pulse = Math.sin(Date.now() / 200) * 0.2 + 0.8;
+                        const pulse = Math.sin(serverNow() / 200) * 0.2 + 0.8;
                         ctx.strokeStyle = `rgba(255, 136, 0, ${pulse})`;
                         ctx.lineWidth = 2;
                         ctx.setLineDash([4, 2]);
@@ -2881,7 +2904,7 @@
             }
             
             // Draw LOCKED boxes with animations
-            const currentTime = Date.now();
+            const currentTime = serverNow();
             
             for (const key in lockedBoxes) {
                 const box = lockedBoxes[key];
@@ -3165,7 +3188,7 @@
                 }
                 
                 drawChart();
-                currentTimeEl.textContent = formatTime(Date.now());
+                currentTimeEl.textContent = formatTime(serverNow());
             }
             requestAnimationFrame(animate);
         }
@@ -3188,32 +3211,48 @@
             }
         }
 
-        // WebSocket
-        // The futures stream can accept a connection - and even ACK a SUBSCRIBE -
-        // while never pushing a single message, when derivatives market data is
-        // withheld for the client's region/IP. A socket that is open but mute never
-        // fires onclose, so a close-based reconnect can't see it. Watch for silence,
-        // and fall back to futures REST (which keeps working) when it goes quiet.
-        let feedMode = 'none';       // 'ws' | 'rest' | 'none'
+        // ================================================
+        // PRICE FEED
+        // ================================================
+        // Primary: the server's Binance stream (/ws). It is the same feed the
+        // server settles real bets on, stamped with the server's clock, so what
+        // you see is exactly what is judged. If the server is unreachable, the
+        // DEMO keeps running off Binance directly; real-money betting is paused
+        // until the server feed is back.
         let lastTickAt = 0;
-        let wsWatchdog = null;
-        let restPollTimer = null;
-        let wsRetryTimer = null;
-
-        const WS_SILENCE_MS = 5000;  // open with no data this long => treat as mute
-        const REST_POLL_MS = 400;    // 150 req/min, weight 1 - well under the limit
-        const WS_RETRY_MS = 60000;   // re-test the stream while running on REST
+        let serverWs = null;
+        let serverFeedUp = false;
+        let serverRetryMs = 1000;
+        let serverHouseEdge = 0.5;
+        let lastServerGrid = null;
+        let feedLabel = 'BTC/USDT';
+        let clockSynced = false;
 
         function setFeedStatus(connected, label) {
             statusDot.classList.toggle('connected', connected);
             statusText.textContent = label;
         }
 
-        // Single ingestion path, shared by the stream and the REST fallback.
-        function ingestPrice(newPrice) {
+        function setFeedLabel(label) {
+            feedLabel = label;
+            document.getElementById('feedLabel').textContent = label;
+            document.getElementById('chartFeedLabel').textContent = label.replace('/', '-');
+        }
+
+        // Keep serverNow() aligned with the server clock (cells and settlement use it).
+        function syncClock(st) {
+            const sample = st - Date.now();
+            serverOffset = clockSynced ? serverOffset * 0.9 + sample * 0.1 : sample;
+            clockSynced = true;
+        }
+
+        // Single ingestion path for every price source. `t` is the tick's server
+        // timestamp when it came from the server.
+        function ingestPrice(newPrice, t) {
             if (!newPrice || isNaN(newPrice) || newPrice <= 0) return;
 
-            lastTickAt = Date.now();
+            const tickTime = t || serverNow();
+            lastTickAt = tickTime;
             prevPrice = price;
             price = newPrice;
             if (!startPrice) startPrice = newPrice;
@@ -3221,123 +3260,203 @@
             // Initialize displayPrice immediately on first data
             if (displayPrice === null) displayPrice = newPrice;
 
-            // Use local time to avoid sync issues with exchange time
-            const localTime = Date.now();
-            priceHistory.push({time: localTime, price: newPrice});
+            priceHistory.push({time: tickTime, price: newPrice});
 
             // Keep 15 min of data for volatility calculation
-            const cutoff = localTime - 15 * 60 * 1000;
-            priceHistory = priceHistory.filter(d => d.time >= cutoff);
+            const cutoff = tickTime - 15 * 60 * 1000;
+            let drop = 0;
+            while (drop < priceHistory.length && priceHistory[drop].time < cutoff) drop++;
+            if (drop) priceHistory.splice(0, drop);
 
             tradeCount++;
             tradeCountEl.textContent = tradeCount.toLocaleString();
             updatePriceDisplay();
 
-            // Check if price touches any locked boxes (use local time)
-            checkLockedBoxTouches(newPrice, localTime);
+            // Demo bets settle locally; real bets are settled by the server.
+            checkLockedBoxTouches(newPrice, tickTime);
         }
 
+        function applyServerGrid(msg) {
+            lastServerGrid = msg;
+            if (!isRealMode) return;
+            const next = {};
+            for (const key in msg.quotes) {
+                const parts = key.split('_');
+                next[key] = {
+                    serverMult: msg.quotes[key], probability: null,
+                    cellTs: Number(parts[0]), priceLevel: Number(parts[1]),
+                    simTime: msg.simTime, simPrice: msg.simPrice,
+                };
+            }
+            gridMultipliers = next;
+            // Header shows the server's model inputs in real mode.
+            estimatedVolatility = msg.vol;
+            estimatedJumpParams = { ...estimatedJumpParams, jumpProb: msg.jumpProb };
+        }
+
+        function authServerSocket() {
+            if (serverWs && serverWs.readyState === WebSocket.OPEN) {
+                serverWs.send(JSON.stringify({ type: 'auth', token: sessionToken || '' }));
+            }
+        }
+
+        function onServerHello(msg) {
+            syncClock(msg.st);
+            setFeedLabel(msg.feed.label);
+            serverHouseEdge = msg.game.houseEdge;
+            if (isRealMode) {
+                document.getElementById('houseEdgeDisplay').textContent = Math.round(serverHouseEdge * 100) + '% (server)';
+            }
+            // Seed the chart with recent history (only if we have none yet).
+            if (msg.ticks.length && priceHistory.length === 0) {
+                priceHistory = msg.ticks.map(([t, p]) => ({ time: t, price: p }));
+                const last = msg.ticks[msg.ticks.length - 1];
+                price = last[1];
+                lastTickAt = last[0];
+                if (displayPrice === null) displayPrice = price;
+                updatePriceDisplay();
+            }
+            if (msg.game.betsPaused) showToast('Real-money betting is paused by the operator', 'warning');
+        }
+
+        function onServerFeed(f) {
+            if (f.label !== feedLabel) {
+                if (clockSynced) showToast('Price source switched to ' + f.label + ' — open real bets were refunded', 'warning');
+                setFeedLabel(f.label);
+            }
+        }
+
+        function markServerLive() {
+            if (!serverFeedUp) {
+                serverFeedUp = true;
+                if (directMode) stopDirectFallback();
+                setFeedStatus(true, 'Live');
+            }
+        }
+
+        function connectServerFeed() {
+            const url = (API_BASE || location.origin).replace(/^http/, 'ws') + '/ws';
+            let opened = false;
+            const sock = new WebSocket(url);
+            serverWs = sock;
+            const openTimer = setTimeout(() => { if (!opened) { try { sock.close(); } catch (e) {} } }, 8000);
+
+            sock.onopen = () => {
+                opened = true;
+                clearTimeout(openTimer);
+                serverRetryMs = 1000;
+                authServerSocket();
+            };
+
+            sock.onmessage = (e) => {
+                let msg;
+                try { msg = JSON.parse(e.data); } catch (err) { return; }
+                switch (msg.type) {
+                    case 'hello': onServerHello(msg); break;
+                    case 'ticks':
+                        syncClock(msg.st);
+                        for (const [t, p] of msg.ticks) ingestPrice(p, t);
+                        markServerLive();
+                        break;
+                    case 'grid': applyServerGrid(msg); break;
+                    case 'feed': onServerFeed(msg.feed); break;
+                    case 'account': applyAccount(msg.account); break;
+                    case 'openBets': applyOpenBets(msg.bets); break;
+                    case 'bet': applySettledBet(msg.bet); break;
+                    case 'auth':
+                        if (!msg.ok && sessionToken) {
+                            clearSession();
+                            showToast('Session expired — reconnect your wallet', 'warning');
+                        }
+                        break;
+                }
+            };
+
+            sock.onclose = () => {
+                clearTimeout(openTimer);
+                if (sock !== serverWs) return;
+                serverFeedUp = false;
+                setFeedStatus(false, 'Reconnecting...');
+                if (!directMode) startDirectFallback();
+                setTimeout(connectServerFeed, serverRetryMs);
+                serverRetryMs = Math.min(15000, serverRetryMs * 2);
+            };
+        }
+
+        // ---------- Direct Binance fallback (demo only, server unreachable) ----------
+        // The futures stream can accept a connection while never pushing a message
+        // when derivatives data is withheld for the client's region/IP, so watch for
+        // silence and fall back to futures REST polling.
+        let directMode = false;
+        let directWs = null;
+        let directGotData = false;
+        let wsWatchdog = null;
+        let restPollTimer = null;
+        const WS_SILENCE_MS = 5000;
+        const REST_POLL_MS = 400;
+
         async function pollRestPrice() {
+            if (!directMode) return;
             try {
                 const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT');
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
+                if (!directMode) return;
                 ingestPrice(parseFloat(data.price));
-                setFeedStatus(true, 'Live (REST)');
+                setFeedStatus(true, 'Demo feed (direct)');
             } catch (e) {
-                console.error('REST price poll failed:', e);
                 setFeedStatus(false, 'Error');
             }
         }
 
-        function startRestFallback(reason) {
-            // Always re-arm the stream re-test, even if REST is already running.
-            clearTimeout(wsRetryTimer);
-            wsRetryTimer = setTimeout(connectWebSocket, WS_RETRY_MS);
-
-            if (feedMode === 'rest') return;
-            feedMode = 'rest';
-            console.warn('Binance futures stream ' + reason + ' - falling back to REST polling');
-            setFeedStatus(true, 'Live (REST)');
-
-            pollRestPrice();
-            clearInterval(restPollTimer);
-            restPollTimer = setInterval(pollRestPrice, REST_POLL_MS);
+        function startDirectFallback() {
+            if (directMode) return;
+            directMode = true;
+            console.warn('Server feed unreachable — demo running on Binance directly; real betting paused');
+            connectBinanceDirect();
         }
 
-        function stopRestFallback() {
+        function stopDirectFallback() {
+            directMode = false;
+            clearTimeout(wsWatchdog);
             clearInterval(restPollTimer);
             restPollTimer = null;
+            if (directWs) { try { directWs.onclose = null; directWs.close(); } catch (e) {} }
+            directWs = null;
         }
 
-        function connectWebSocket() {
-            clearTimeout(wsRetryTimer);
-
-            // Don't stack sockets if the retry fires while one is still alive.
-            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-                try { ws.onclose = null; ws.close(); } catch (e) {}
-            }
-
-            ws = new WebSocket('wss://fstream.binance.com/ws/btcusdt@aggTrade');
-            const thisWs = ws;
-            let gotData = false;
-
-            ws.onopen = () => {
-                console.log('Connected to Binance Futures');
-
-                // An open socket is not a working feed - only a message proves that.
-                if (feedMode !== 'rest') setFeedStatus(false, 'Waiting for data...');
-
+        function connectBinanceDirect() {
+            if (!directMode) return;
+            const sock = new WebSocket('wss://fstream.binance.com/ws/btcusdt@aggTrade');
+            directWs = sock;
+            directGotData = false;
+            sock.onopen = () => {
                 clearTimeout(wsWatchdog);
                 wsWatchdog = setTimeout(() => {
-                    if (gotData || thisWs !== ws) return;
-                    try { thisWs.onclose = null; thisWs.close(); } catch (e) {}
-                    startRestFallback('opened but sent no data in ' + (WS_SILENCE_MS / 1000) + 's');
+                    if (directGotData || sock !== directWs || !directMode) return;
+                    try { sock.onclose = null; sock.close(); } catch (e) {}
+                    if (!restPollTimer) {
+                        pollRestPrice();
+                        restPollTimer = setInterval(pollRestPrice, REST_POLL_MS);
+                    }
                 }, WS_SILENCE_MS);
             };
-
-            ws.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                const newPrice = parseFloat(data.p);
-
-                // Skip invalid data
-                if (!newPrice || isNaN(newPrice) || newPrice <= 0) {
-                    console.log('Invalid price data:', data);
-                    return;
-                }
-
-                if (!gotData) {
-                    gotData = true;
+            sock.onmessage = (e) => {
+                if (!directMode) return;
+                const newPrice = parseFloat(JSON.parse(e.data).p);
+                if (!newPrice || isNaN(newPrice) || newPrice <= 0) return;
+                if (!directGotData) {
+                    directGotData = true;
                     clearTimeout(wsWatchdog);
-                    if (feedMode === 'rest') {
-                        console.log('Futures stream recovered - leaving REST fallback');
-                    }
-                    stopRestFallback();
-                    feedMode = 'ws';
-                    setFeedStatus(true, 'Live');
+                    setFeedStatus(true, 'Demo feed (direct)');
                 }
-
                 ingestPrice(newPrice);
             };
-
-            ws.onerror = () => {
-                if (feedMode !== 'rest') setFeedStatus(false, 'Error');
-            };
-
-            ws.onclose = () => {
-                clearTimeout(wsWatchdog);
-                if (thisWs !== ws) return;
-                if (feedMode === 'rest') return;  // REST is already carrying the app
-                feedMode = 'none';
-                setFeedStatus(false, 'Reconnecting...');
-                setTimeout(connectWebSocket, 3000);
+            sock.onclose = () => {
+                if (sock !== directWs || !directMode) return;
+                setTimeout(connectBinanceDirect, 3000);
             };
         }
-
-        // Last resort: if nothing has produced a tick shortly after boot, force REST.
-        setTimeout(() => {
-            if (!lastTickAt) startRestFallback('never delivered a tick');
-        }, WS_SILENCE_MS + 2000);
         
         // Check if current price touches any locked boxes
         function checkLockedBoxTouches(currentPrice, currentTime) {
@@ -3349,6 +3468,8 @@
                 
                 // Skip already touched or expired boxes
                 if (box.touched || box.expired) continue;
+                // Real bets are settled by the server, never here.
+                if (box.isRealBet) continue;
                 
                 // Check if we're within this box's time window
                 const boxStart = box.cellTs;
@@ -3359,7 +3480,7 @@
                     // Box covers: [priceLevel, priceLevel + pricePerCell)
                     if (currentPrice >= box.priceLevel && currentPrice < box.priceLevel + pricePerCell) {
                         box.touched = true;
-                        box.touchedAt = Date.now(); // Record when touched for animation
+                        box.touchedAt = serverNow(); // Record when touched for animation
                         
                         // Calculate and add payout, resolve pending bet
                         const payout = box.betAmount * box.multiplier;
@@ -3368,12 +3489,7 @@
                         totalWins++;
                         box.payout = payout;
                         updateBalanceDisplay();
-                        
-                        // Save win to database if real bet
-                        if (box.isRealBet) {
-                            resolveBetInDatabase(key, true, true);
-                        }
-                        
+
                         playCashRegisterSound(); // Cha-ching!
                         console.log('WIN!', key, 'Bet: $' + box.betAmount, 'Payout: $' + payout.toFixed(2));
                     }
@@ -3384,14 +3500,15 @@
         // Update expired status for locked boxes and handle losses
         // Small buffer (200ms) ensures last-second wins are caught by price ticks first
         function updateLockedBoxExpiry() {
-            const now = Date.now();
+            const now = serverNow();
             const msPerCell = 10000; // 10 seconds per cell
             const expiryBuffer = 200; // 200ms grace period
             
             for (const key in lockedBoxes) {
                 const box = lockedBoxes[key];
+                if (box.isRealBet) continue; // server settles real bets
                 const cellTs = box.cellTs;
-                
+
                 // Check if box should expire (with buffer)
                 if (!box.expired && now >= cellTs + msPerCell + expiryBuffer) {
                     box.expired = true;
@@ -3401,12 +3518,7 @@
                         pendingBets -= box.betAmount;
                         totalLosses++;
                         updateBalanceDisplay();
-                        
-                        // Save loss to database if real bet
-                        if (box.isRealBet) {
-                            resolveBetInDatabase(key, false, false);
-                        }
-                        
+
                         playLossSound();
                         console.log('LOSS (expiry)!', key, 'Lost: $' + box.betAmount);
                     }
@@ -3418,7 +3530,7 @@
         function scheduleSimulation() {
             if (!price) return;
             
-            const now = Date.now();
+            const now = serverNow();
             const timeSinceLastSim = now - lastSimTime;
             
             // Run simulation every 1 second for responsive 15-second cells
@@ -3440,7 +3552,7 @@
         initTradingUI();
         fetch24hStats();
         setInterval(fetch24hStats, 60000);
-        connectWebSocket();
+        connectServerFeed();
         requestAnimationFrame(animate);
         
         // Run simulation check every 300ms (simulation itself runs every 1s)
@@ -3609,69 +3721,34 @@
         });
         
         // ================================================
-        // DEPOSIT/WITHDRAWAL FUNCTIONALITY
+        // REAL MONEY — server-authoritative (Railway backend)
         // ================================================
-        
-        // ============================================
-        // ⚠️ CONFIGURATION - YOUR PROJECT SETTINGS ⚠️
-        // ============================================
-        
-        // Supabase Configuration
-        const SUPABASE_URL = 'https://kkrwjjvpwqqxnrieincp.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtrcndqanZwd3FxeG5yaWVpbmNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MTA2MjMsImV4cCI6MjA4NTE4NjYyM30.VVieM9VEdBEwgEI5P1_y1MJyk_KBFGk3ejk2FZtHGos';
-        
-        // Treasury Wallet Addresses
-        const DEPOSIT_ADDRESSES = {
-            ethereum: '0x0648B7CBb8C4424f6fAa17714d415106b12396eE',
-            arbitrum: '0x0648B7CBb8C4424f6fAa17714d415106b12396eE',
-            base: '0x0648B7CBb8C4424f6fAa17714d415106b12396eE',
-            solana: 'xEPGhfFzud5jKJrMmvzqwLhgMqz3KTjoJ3bPQB6mtKr'
+        // The server owns real money end to end: it streams the Binance price
+        // (see connectServerFeed), prices every cell, accepts or rejects bets,
+        // settles them off its own feed, and holds the ledger. This page only
+        // displays what the server says and asks the wallet to sign.
+
+        // Solana wallets (live) — EVM wallets are shown as coming soon.
+        const SOLANA_WALLETS = {
+            phantom:  { name: 'Phantom',  url: 'https://phantom.com/',
+                        get: () => (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) ? window.phantom.solana
+                                 : (window.solana && window.solana.isPhantom ? window.solana : null) },
+            solflare: { name: 'Solflare', url: 'https://solflare.com/',
+                        get: () => (window.solflare && window.solflare.isSolflare) ? window.solflare : null },
+            backpack: { name: 'Backpack', url: 'https://backpack.app/',
+                        get: () => (window.backpack && window.backpack.isBackpack) ? window.backpack : null },
         };
-        
-        // Solana RPC endpoint (Alchemy - same API key as EVM)
-        const SOLANA_RPC = 'https://solana-mainnet.g.alchemy.com/v2/UJ-pPERNqt6Q7E5CmtbwG';
-        
-        // Solana token mint addresses (mainnet)
-        const SOLANA_TOKEN_MINTS = {
-            USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-            USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
-        };
-        
-        // ============================================
-        // Token contracts (standard - don't change)
-        // ============================================
-        const TOKEN_CONTRACTS = {
-            ethereum: {
-                USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-                USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7'
-            },
-            arbitrum: {
-                USDC: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
-                USDT: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9'
-            },
-            base: {
-                USDC: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-                USDT: '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb'
-            },
-            solana: {
-                USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-                USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
-            }
-        };
-        
-        const NETWORKS = {
-            ethereum: { chainId: '0x1', chainName: 'Ethereum' },
-            arbitrum: { chainId: '0xa4b1', chainName: 'Arbitrum' },
-            base: { chainId: '0x2105', chainName: 'Base' },
-            solana: { chainName: 'Solana' }
-        };
-        
+
+        const TOKEN_PROGRAM_ID_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+        const ATA_PROGRAM_ID_STR = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL';
+        const MEMO_PROGRAM_ID_STR = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+
         // ================================================
         // TRADING MODE STATE (DEMO vs REAL)
         // ================================================
         let isRealMode = false;  // false = demo, true = real money
         const DEMO_STARTING_BALANCE = 10000;
-        
+
         // Demo Mode State (separate from real)
         let demoBalance = DEMO_STARTING_BALANCE;
         let demoStartingBalance = DEMO_STARTING_BALANCE;
@@ -3679,79 +3756,82 @@
         let demoTotalWins = 0;
         let demoTotalLosses = 0;
         let demoLockedBoxes = {};
-        
-        // Real Mode State (loaded from blockchain deposits)
+
+        // Real Mode State (mirrors the server's account)
         let realBalance = 0;
         let realStartingBalance = 0;
         let realPendingBets = 0;
         let realTotalWins = 0;
         let realTotalLosses = 0;
         let realLockedBoxes = {};
-        
+
+        // Wallet / session state
+        let currentWallet = null;    // 'phantom' | 'solflare' | 'backpack'
+        let currentProvider = null;
+        let currentAddress = null;
+        let sessionToken = null;
+        let walletUsdc = 0;
+        let walletSol = 0;
+        let serverConfig = null;
+
         // ================================================
-        // MODE SWITCHING FUNCTIONS
+        // MODE SWITCHING
         // ================================================
         function toggleTradingMode() {
             const toggle = document.getElementById('modeToggle');
-            const wasRealMode = isRealMode;
             isRealMode = toggle.checked;
-            
-            // Update mode labels
+
             document.getElementById('demoLabel').classList.toggle('active', !isRealMode);
             document.getElementById('realLabel').classList.toggle('active', isRealMode);
-            
-            // Update balance indicator
+
             const indicator = document.getElementById('balanceModeIndicator');
+            const slider = document.getElementById('houseEdgeSlider');
             if (isRealMode) {
                 indicator.textContent = 'REAL';
                 indicator.className = 'balance-mode-indicator real';
                 document.getElementById('tradingPanel').classList.add('real-mode-active');
-                showToast('REAL MONEY MODE — You are trading with deposited funds. Trade responsibly!', 'warning');
+                showToast('REAL MONEY MODE — odds, bets and results are decided by the server. Trade responsibly!', 'warning');
             } else {
                 indicator.textContent = 'DEMO';
                 indicator.className = 'balance-mode-indicator demo';
                 document.getElementById('tradingPanel').classList.remove('real-mode-active');
                 showToast('DEMO MODE — Trading with $10,000 virtual balance', 'info');
             }
-            
-            // Update footer
+
+            // Real money uses the server's fixed house edge; the slider is demo-only.
+            if (slider) {
+                slider.disabled = isRealMode;
+                const pct = Math.round((isRealMode ? serverHouseEdge : houseEdge) * 100);
+                document.getElementById('houseEdgeDisplay').textContent = pct + '%' + (isRealMode ? ' (server)' : '');
+            }
+
             const footer = document.querySelector('.footer');
             if (footer) {
                 if (isRealMode) {
-                    footer.innerHTML = 'REAL MONEY MODE • Trading with deposited funds • Click or Drag to bet';
+                    footer.innerHTML = 'REAL MONEY MODE • Solana USDC • Server-settled on ' + escapeHtml(feedLabel) + ' • Click or Drag to bet';
                     footer.style.color = '#00ff88';
                 } else {
                     footer.innerHTML = 'DEMO MODE • $10,000 virtual balance • Click or Drag to bet';
                     footer.style.color = '#8888aa';
                 }
             }
-            
-            // Switch the active locked boxes
+
+            // Multipliers come from the server in real mode, from the local sim in demo.
+            gridMultipliers = {};
+            if (isRealMode && lastServerGrid) applyServerGrid(lastServerGrid);
+
             lockedBoxes = isRealMode ? realLockedBoxes : demoLockedBoxes;
-            
-            // Sync trading state variables to current mode
             syncTradingStateToMode();
-            
-            // Update display
             updateBalanceDisplay();
-            
-            // If switching to real mode, load real balance
-            if (isRealMode) {
-                if (currentAddress) {
-                    loadRealBalance();
-                } else if (realBalance === 0) {
-                    // Show toast and open deposit modal
-                    setTimeout(() => {
-                        showToast('Real balance is $0.00 — Connect wallet and deposit to start trading', 'info');
-                        openDepositModal();
-                    }, 100);
-                }
+
+            if (isRealMode && !sessionToken) {
+                setTimeout(() => {
+                    showToast('Connect a Solana wallet and deposit USDC to play for real', 'info');
+                    openDepositModal();
+                }, 100);
             }
-            
-            console.log('Mode switched to:', isRealMode ? 'REAL MONEY' : 'DEMO');
         }
-        
-        // Sync module-level trading vars to current mode
+
         function syncTradingStateToMode() {
             if (isRealMode) {
                 balance = realBalance;
@@ -3767,8 +3847,7 @@
                 totalLosses = demoTotalLosses;
             }
         }
-        
-        // Save current trading state back to mode-specific vars
+
         function saveTradingStateToMode() {
             if (isRealMode) {
                 realBalance = balance;
@@ -3782,1121 +3861,657 @@
                 demoTotalLosses = totalLosses;
             }
         }
-        
-        // Load real balance from Supabase (deposits - withdrawals)
-        async function loadRealBalance() {
-            if (!currentAddress) return;
-            
-            try {
-                // Use game-actions API to get full game state
-                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    },
-                    body: JSON.stringify({
-                        action: 'get_state',
-                        wallet_address: currentAddress
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success && result.state) {
-                    realBalance = result.state.balance;
-                    realStartingBalance = result.state.starting_balance;
-                    realTotalWins = result.state.win_count || 0;
-                    realTotalLosses = result.state.loss_count || 0;
-                    realPendingBets = result.state.pending_bets || 0;
-                    
-                    if (isRealMode) {
-                        balance = realBalance;
-                        startingBalance = realStartingBalance;
-                        totalWins = realTotalWins;
-                        totalLosses = realTotalLosses;
-                        pendingBets = realPendingBets;
-                        updateBalanceDisplay();
-                    }
-                    
-                    console.log('Game state loaded:', result.state);
-                    
-                    // Also load active bets to restore locked boxes
-                    await loadActiveBets();
-                } else {
-                    console.error('Failed to load game state:', result.error);
-                    // Fallback to simple deposit-based balance
-                    await loadRealBalanceFallback();
+
+        // ================================================
+        // SERVER API
+        // ================================================
+        async function api(path, { method = 'GET', body } = {}) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (sessionToken) headers.Authorization = 'Bearer ' + sessionToken;
+            const res = await fetch(API_BASE + '/api' + path, {
+                method, headers, body: body ? JSON.stringify(body) : undefined,
+            });
+            let json = null;
+            try { json = await res.json(); } catch (e) { /* empty body */ }
+            if (!res.ok) {
+                if (res.status === 401 && sessionToken && /Not signed in/.test((json && json.error) || '')) {
+                    clearSession();
                 }
-                
-            } catch (error) {
-                console.error('Failed to load real balance:', error);
-                await loadRealBalanceFallback();
+                throw new Error((json && json.error) || ('Server error ' + res.status));
+            }
+            return json;
+        }
+
+        async function getServerConfig() {
+            if (!serverConfig) serverConfig = await api('/config');
+            return serverConfig;
+        }
+
+        // Account pushed by the server (on sign-in, after every bet/settlement/deposit/withdrawal).
+        // Snapshots can arrive out of order (WS push vs. HTTP refresh), so keep the newest.
+        let lastAccountAsOf = 0;
+        function applyAccount(acct) {
+            if (acct.asOf) {
+                if (acct.asOf < lastAccountAsOf) return;
+                lastAccountAsOf = acct.asOf;
+            }
+            realBalance = acct.balance;
+            realPendingBets = acct.inPlay;
+            realTotalWins = acct.wins;
+            realTotalLosses = acct.losses;
+            // P&L shown = (balance + in play) - starting balance, so this makes it equal the realized P&L.
+            realStartingBalance = acct.balance + acct.inPlay - acct.pnl;
+            if (isRealMode) {
+                syncTradingStateToMode();
+                updateBalanceDisplay();
+            }
+            const avail = document.getElementById('availableWithdrawBalance');
+            if (avail) avail.textContent = '$' + acct.balance.toFixed(2);
+            updateWithdrawButton();
+        }
+
+        function boxFromBet(bet, existing) {
+            const box = existing || {};
+            box.multiplier = bet.multiplier;
+            box.cellTs = bet.cellTs;
+            box.priceLevel = bet.priceLevel;
+            box.betAmount = bet.amount;
+            box.isRealBet = true;
+            box.betId = bet.id;
+            box.pending = false;
+            if (box.touched === undefined) box.touched = false;
+            if (box.expired === undefined) box.expired = false;
+            if (!box.lockedAt) box.lockedAt = serverNow();
+            return box;
+        }
+
+        function applyOpenBets(bets) {
+            // Mutate in place so `lockedBoxes` keeps pointing at the same object.
+            for (const key in realLockedBoxes) {
+                const b = realLockedBoxes[key];
+                if (!b.touched && !b.expired && !b.pending) delete realLockedBoxes[key];
+            }
+            for (const bet of bets) realLockedBoxes[bet.cell] = boxFromBet(bet, realLockedBoxes[bet.cell]);
+        }
+
+        // A bet the server settled.
+        function applySettledBet(bet) {
+            let box = realLockedBoxes[bet.cell];
+            if (bet.status === 'void') {
+                delete realLockedBoxes[bet.cell];
+                showToast(bet.voidReason || 'Bet voided — stake refunded', 'warning');
+                return;
+            }
+            box = realLockedBoxes[bet.cell] = boxFromBet(bet, box);
+            if (bet.status === 'won') {
+                box.touched = true;
+                box.touchedAt = serverNow();
+                box.payout = bet.payout;
+                playCashRegisterSound();
+                console.log('[REAL] WIN', bet.cell, '$' + bet.payout.toFixed(2), 'tick', bet.touchPrice);
+            } else if (bet.status === 'lost') {
+                box.expired = true;
+                playLossSound();
             }
         }
-        
-        // Fallback balance loader (if game-actions not available)
-        async function loadRealBalanceFallback() {
+
+        // ---------- placing bets (batched so a drag is one request) ----------
+        let realBetQueue = [];
+        let realBetFlushTimer = null;
+
+        function queueRealBet(key) {
+            if (!sessionToken) {
+                showToast('Connect your wallet to bet with real money', 'warning');
+                openDepositModal();
+                return false;
+            }
+            if (!serverFeedUp) {
+                showToast('Real-money betting needs the live server feed — reconnecting...', 'error');
+                return false;
+            }
+            const data = gridMultipliers[key];
+            if (!data || !data.serverMult) return false;
+            if (betSize > balance) {
+                if (balance <= 0) {
+                    showToast('Insufficient balance — deposit USDC to play', 'warning');
+                    openDepositModal();
+                }
+                return false;
+            }
+            // Optimistic display; the server's answer (and account push) is authoritative.
+            balance -= betSize;
+            pendingBets += betSize;
+            updateBalanceDisplay();
+            lockedBoxes[key] = {
+                multiplier: data.serverMult,
+                cellTs: data.cellTs,
+                priceLevel: data.priceLevel,
+                touched: false,
+                expired: false,
+                lockedAt: serverNow(),
+                betAmount: betSize,
+                isRealBet: true,
+                pending: true,
+            };
+            realBetQueue.push({ cell: key, amount: betSize, seenMult: data.serverMult });
+            if (!realBetFlushTimer) realBetFlushTimer = setTimeout(flushRealBets, 60);
+            return true;
+        }
+
+        async function flushRealBets() {
+            realBetFlushTimer = null;
+            const batch = realBetQueue.splice(0, realBetQueue.length);
+            if (!batch.length) return;
             try {
-                // First try to get balance from user_game_state table
-                const gameStateRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/user_game_state?wallet_address=eq.' + currentAddress.toLowerCase() + '&select=balance,starting_balance,win_count,loss_count,pending_bets',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const gameState = await gameStateRes.json();
-                
-                if (gameState && gameState.length > 0 && gameState[0].balance !== null) {
-                    // Use the tracked balance from game state (includes wins/losses)
-                    realBalance = parseFloat(gameState[0].balance) || 0;
-                    realStartingBalance = parseFloat(gameState[0].starting_balance) || realBalance;
-                    realTotalWins = gameState[0].win_count || 0;
-                    realTotalLosses = gameState[0].loss_count || 0;
-                    realPendingBets = parseFloat(gameState[0].pending_bets) || 0;
-                    
-                    console.log('Loaded balance from user_game_state:', realBalance);
-                } else {
-                    // No game state exists yet - calculate from deposits/withdrawals
-                    const depositsRes = await fetch(
-                        SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
-                        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                    );
-                    const deposits = await depositsRes.json() || [];
-                    
-                    const withdrawalsRes = await fetch(
-                        SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
-                        { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                    );
-                    const withdrawals = await withdrawalsRes.json() || [];
-                    
-                    let totalDeposited = 0;
-                    let totalWithdrawn = 0;
-                    
-                    deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
-                    withdrawals.forEach(w => {
-                        if (w.status === 'completed' || w.status === 'approved' || w.status === 'pending') {
-                            totalWithdrawn += parseFloat(w.amount) || 0;
-                        }
-                    });
-                    
-                    realBalance = Math.max(0, totalDeposited - totalWithdrawn);
-                    realStartingBalance = realBalance;
-                    
-                    console.log('Loaded balance from deposits/withdrawals:', realBalance);
+                const result = await api('/bets', { method: 'POST', body: { bets: batch } });
+                for (const bet of result.accepted) {
+                    realLockedBoxes[bet.cell] = boxFromBet(bet, realLockedBoxes[bet.cell]);
                 }
-                
-                if (isRealMode) {
-                    balance = realBalance;
-                    startingBalance = realStartingBalance;
-                    totalWins = realTotalWins || 0;
-                    totalLosses = realTotalLosses || 0;
-                    pendingBets = realPendingBets || 0;
-                    updateBalanceDisplay();
+                if (result.rejected.length) {
+                    for (const r of result.rejected) delete realLockedBoxes[r.cell];
+                    const reasons = [...new Set(result.rejected.map(r => r.reason))];
+                    showToast(result.rejected.length + ' bet' + (result.rejected.length > 1 ? 's' : '') + ' not placed: ' + reasons.join('; '), 'error');
+                    playLossSound();
                 }
+            } catch (err) {
+                for (const b of batch) delete realLockedBoxes[b.cell];
+                showToast('Bet failed: ' + err.message, 'error');
+            }
+            // Re-sync balance from the server either way.
+            refreshAccount();
+        }
+
+        async function refreshAccount() {
+            if (!sessionToken) return;
+            try {
+                const me = await api('/me');
+                applyAccount(me.account);
+                applyOpenBets(me.openBets);
             } catch (e) {
-                console.error('Fallback balance load failed:', e);
+                console.warn('Account refresh failed:', e.message);
             }
         }
-        
-        // Load active bets from database and restore locked boxes
-        async function loadActiveBets() {
-            if (!currentAddress || !isRealMode) return;
-            
-            try {
-                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    },
-                    body: JSON.stringify({
-                        action: 'get_active_bets',
-                        wallet_address: currentAddress
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success && result.bets) {
-                    // Clear current locked boxes for real mode
-                    realLockedBoxes = {};
-                    
-                    // Restore each active bet as a locked box
-                    for (const bet of result.bets) {
-                        const key = bet.cell_key;
-                        realLockedBoxes[key] = {
-                            multiplier: parseFloat(bet.multiplier),
-                            cellTs: parseInt(bet.cell_timestamp),
-                            priceLevel: parseFloat(bet.price_level),
-                            touched: false,
-                            expired: false,
-                            lockedAt: new Date(bet.locked_at).getTime(),
-                            betAmount: parseFloat(bet.amount),
-                            isRealBet: true,
-                            dbBetId: bet.id  // Store database ID for resolution
-                        };
-                    }
-                    
-                    // If in real mode, update the active lockedBoxes
-                    if (isRealMode) {
-                        lockedBoxes = realLockedBoxes;
-                    }
-                    
-                    console.log('Restored', result.bets.length, 'active bets from database');
-                }
-            } catch (error) {
-                console.error('Failed to load active bets:', error);
-            }
-        }
-        
-        // Save bet to database when placed (real mode only)
-        async function saveBetToDatabase(key, betData) {
-            if (!currentAddress || !isRealMode) return null;
-            
-            try {
-                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    },
-                    body: JSON.stringify({
-                        action: 'place_bet',
-                        wallet_address: currentAddress,
-                        cell_key: key,
-                        amount: betData.betAmount,
-                        multiplier: betData.multiplier,
-                        price_level: betData.priceLevel,
-                        cell_timestamp: betData.cellTs,
-                        expires_at: new Date(betData.cellTs + 10000).toISOString()
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    console.log('[REAL] Bet saved to database:', result.bet_id);
-                    return result.bet_id;
-                } else {
-                    console.error('Failed to save bet:', result.error);
-                    return null;
-                }
-            } catch (error) {
-                console.error('Error saving bet to database:', error);
-                return null;
-            }
-        }
-        
-        // Resolve bet in database (win/loss/expire)
-        async function resolveBetInDatabase(key, won, touched) {
-            if (!currentAddress || !isRealMode) return;
-            
-            const box = lockedBoxes[key];
-            if (!box || !box.isRealBet) return;
-            
-            try {
-                const response = await fetch(SUPABASE_URL + '/functions/v1/game-actions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    },
-                    body: JSON.stringify({
-                        action: 'resolve_bet',
-                        wallet_address: currentAddress,
-                        cell_key: key,
-                        bet_id: box.dbBetId || null,
-                        won: won,
-                        touched: touched
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    console.log('[REAL] Bet resolved in database:', key, won ? 'WON' : 'LOST', 'New balance:', result.new_balance);
-                    // Update real balance from server
-                    realBalance = result.new_balance;
-                    if (isRealMode) {
-                        balance = realBalance;
-                    }
-                } else {
-                    console.error('Failed to resolve bet:', result.error);
-                }
-            } catch (error) {
-                console.error('Error resolving bet in database:', error);
-            }
-        }
-        
-        // Wallet State
-        let currentWallet = null;
-        let currentProvider = null;
-        let currentAddress = null;
-        let selectedChain = 'ethereum';
-        let selectedDepositToken = 'USDC';
-        let selectedWithdrawToken = 'USDC';
-        let isWalletVerified = false;
-        let verificationSignature = null;
-        let walletTokenBalance = 0;
-        let platformBalance = 0;
-        
-        // Modal Functions
+
+        // ================================================
+        // MODAL
+        // ================================================
         function openDepositModal() {
-            // Auto-switch to real mode if in demo
             if (!isRealMode) {
                 showToast('Switching to Real Money mode for deposits', 'info');
                 document.getElementById('modeToggle').checked = true;
                 toggleTradingMode();
             }
-            
             document.getElementById('depositModal').classList.add('show');
             if (currentAddress) {
                 loadHistory();
-                loadAvailableBalance();
                 checkWalletTokenBalance();
+                refreshAccount();
             }
         }
-        
+
         function closeDepositModal() {
             document.getElementById('depositModal').classList.remove('show');
         }
-        
-        // Toast notification function
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
         function showToast(message, type = 'info') {
             const container = document.getElementById('toastContainer');
             if (!container) return;
-            
-            const icons = {
-                success: '✓',
-                error: '✕',
-                info: 'ℹ',
-                warning: '⚠'
-            };
-            
+            const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
             const toast = document.createElement('div');
             toast.className = 'toast ' + type;
-            toast.innerHTML = `
-                <span class="toast-icon">${icons[type] || icons.info}</span>
-                <span class="toast-message">${message}</span>
-            `;
-            
+            const icon = document.createElement('span');
+            icon.className = 'toast-icon';
+            icon.textContent = icons[type] || icons.info;
+            const msg = document.createElement('span');
+            msg.className = 'toast-message';
+            msg.textContent = message;
+            toast.append(icon, msg);
             container.appendChild(toast);
-            
-            // Auto remove after 5 seconds
             setTimeout(() => {
                 toast.classList.add('hiding');
                 setTimeout(() => toast.remove(), 300);
             }, 5000);
         }
-        
+
         function showModalStatus(message, type) {
-            // Show toast notification only (bottom right corner)
             showToast(message, type);
         }
-        
+
         function switchModalTab(tab) {
             document.getElementById('depositTabBtn').classList.toggle('active', tab === 'deposit');
             document.getElementById('withdrawTabBtn').classList.toggle('active', tab === 'withdraw');
             document.getElementById('depositFormModal').style.display = tab === 'deposit' ? 'block' : 'none';
             document.getElementById('withdrawFormModal').style.display = tab === 'withdraw' ? 'block' : 'none';
-            
-            if (tab === 'withdraw' && currentAddress) {
-                loadAvailableBalance();
-            }
+            if (tab === 'withdraw') refreshAccount();
         }
-        
-        function selectChain(chain) {
-            selectedChain = chain;
-            document.querySelectorAll('.chain-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.chain === chain);
-            });
-            
-            if (currentWallet === 'phantom' && chain !== 'solana') {
-                showModalStatus('Phantom wallet only works with Solana.', 'error');
-            } else if ((currentWallet === 'metamask' || currentWallet === 'rabby') && chain === 'solana') {
-                showModalStatus('This wallet does not support Solana. Use Phantom.', 'error');
-            }
-            
-            if (currentAddress) {
-                checkWalletTokenBalance();
-            }
+
+        function comingSoon(name) {
+            showToast(name + ' support is coming soon — Solana USDC is live now', 'info');
         }
-        
-        function selectDepositToken(token) {
-            selectedDepositToken = token;
-            document.querySelectorAll('#depositFormModal .token-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.token === token);
-            });
-            if (currentAddress) checkWalletTokenBalance();
+
+        // Missing logo file -> lettered badge in the same <img> (keeps its id).
+        function logoFallback(img) {
+            img.onerror = null;
+            const letter = escapeHtml((img.alt || '?').charAt(0));
+            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">'
+                + '<circle cx="16" cy="16" r="16" fill="#2a2a3a"/>'
+                + '<text x="16" y="21" font-family="Arial" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">'
+                + letter + '</text></svg>';
+            img.src = 'data:image/svg+xml,' + encodeURIComponent(svg);
         }
-        
-        function selectWithdrawToken(token) {
-            selectedWithdrawToken = token;
-            document.querySelectorAll('#withdrawFormModal .token-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.token === token);
-            });
-            loadAvailableBalance();
-        }
-        
-        // Wallet Connection
+
+        // ================================================
+        // WALLET CONNECTION + SIGN-IN
+        // ================================================
         function toggleWalletOptions() {
             document.getElementById('walletOptions').classList.toggle('show');
         }
-        
-        async function connectWallet(type) {
-            try {
-                if (type === 'metamask' || type === 'rabby') {
-                    if (!window.ethereum) {
-                        showModalStatus('Wallet not detected. Please install MetaMask or Rabby.', 'error');
-                        return;
-                    }
-                    
-                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    currentWallet = type;
-                    currentProvider = window.ethereum;
-                    currentAddress = accounts[0];
-                    
-                    try {
-                        await window.ethereum.request({
-                            method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: NETWORKS[selectedChain].chainId }]
-                        });
-                    } catch (e) {
-                        console.log('Chain switch:', e);
-                    }
-                    
-                } else if (type === 'phantom') {
-                    const phantom = window.phantom?.solana || window.solana;
-                    if (!phantom?.isPhantom) {
-                        showModalStatus('Phantom not detected. Please install it.', 'error');
-                        return;
-                    }
-                    
-                    const response = await phantom.connect();
-                    currentWallet = 'phantom';
-                    currentProvider = phantom;
-                    currentAddress = response.publicKey.toString();
-                    selectedChain = 'solana';
-                    
-                    document.querySelectorAll('.chain-btn').forEach(btn => {
-                        btn.classList.toggle('active', btn.dataset.chain === 'solana');
-                    });
+
+        // Base58 (signatures only)
+        const B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        function base58Encode(bytes) {
+            const digits = [0];
+            for (const byte of bytes) {
+                let carry = byte;
+                for (let j = 0; j < digits.length; j++) {
+                    carry += digits[j] << 8;
+                    digits[j] = carry % 58;
+                    carry = (carry / 58) | 0;
                 }
-                
-                // Update UI
+                while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+            }
+            let out = '';
+            for (const byte of bytes) { if (byte === 0) out += '1'; else break; }
+            for (let k = digits.length - 1; k >= 0; k--) out += B58_ALPHABET[digits[k]];
+            return out;
+        }
+
+        async function signText(message) {
+            const out = await currentProvider.signMessage(new TextEncoder().encode(message), 'utf8');
+            const sig = out instanceof Uint8Array ? out : (out && out.signature) || out;
+            return base58Encode(sig instanceof Uint8Array ? sig : new Uint8Array(sig));
+        }
+
+        function actionMessage(action, extra = {}) {
+            let m = `BTC Grid\nAction: ${action}\nWallet: ${currentAddress}\nTimestamp: ${serverNow()}`;
+            for (const [k, v] of Object.entries(extra)) m += `\n${k}: ${v}`;
+            return m;
+        }
+
+        function storedSession(wallet) {
+            try {
+                const s = JSON.parse(sessionStorage.getItem('btcgrid_session_' + wallet) || 'null');
+                return s && s.expiresAt > Date.now() + 60000 ? s : null;
+            } catch (e) { return null; }
+        }
+
+        function clearSession() {
+            if (currentAddress) {
+                try { sessionStorage.removeItem('btcgrid_session_' + currentAddress); } catch (e) { /* ignore */ }
+            }
+            sessionToken = null;
+        }
+
+        async function signIn() {
+            const saved = storedSession(currentAddress);
+            if (saved) {
+                sessionToken = saved.token;
+            } else {
+                showModalStatus('Sign the message in your wallet to log in (free, no transaction)', 'info');
+                const message = actionMessage('login');
+                const signature = await signText(message);
+                const res = await fetch(API_BASE + '/api/auth/login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ wallet: currentAddress, message, signature }),
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.error || 'Login failed');
+                sessionToken = json.token;
+                try { sessionStorage.setItem('btcgrid_session_' + currentAddress, JSON.stringify({ token: json.token, expiresAt: json.expiresAt })); } catch (e) { /* private mode */ }
+            }
+            authServerSocket();
+            await refreshAccount();
+        }
+
+        async function connectWallet(type) {
+            const def = SOLANA_WALLETS[type];
+            if (!def) return comingSoon(type === 'metamask' ? 'MetaMask' : type === 'rabby' ? 'Rabby' : type);
+            const provider = def.get();
+            if (!provider) {
+                showModalStatus(def.name + ' not detected — install it from ' + def.url, 'error');
+                window.open(def.url, '_blank', 'noopener');
+                return;
+            }
+            try {
+                const resp = await provider.connect();
+                const pk = (resp && resp.publicKey) || provider.publicKey;
+                if (!pk) throw new Error('Wallet did not return a public key');
+                currentWallet = type;
+                currentProvider = provider;
+                currentAddress = pk.toString();
+
+                const short = currentAddress.slice(0, 4) + '...' + currentAddress.slice(-4);
                 document.getElementById('walletStatusConnected').style.display = 'flex';
                 document.getElementById('walletStatusDisconnected').style.display = 'none';
-                document.getElementById('connectedWalletAddress').textContent = 
-                    currentAddress.slice(0, 6) + '...' + currentAddress.slice(-4);
+                document.getElementById('connectedWalletAddress').textContent = short;
+                const logo = document.getElementById('connectedWalletLogo');
+                logo.onerror = () => logoFallback(logo);
+                logo.alt = def.name;
+                logo.src = 'assets/logos/' + type + '.svg';
                 document.getElementById('walletOptions').classList.remove('show');
-                
                 document.getElementById('walletMainBtn').classList.add('connected');
-                document.getElementById('walletMainText').textContent = currentAddress.slice(0, 6) + '...' + currentAddress.slice(-4);
-                
-                showModalStatus('Wallet connected!', 'success');
-                
-                checkWalletVerification();
+                document.getElementById('walletMainText').textContent = short;
+
+                await signIn();
+                showModalStatus(def.name + ' connected and signed in', 'success');
                 checkWalletTokenBalance();
-                loadPlatformBalance();
                 loadHistory();
-                
-                // Load real balance for game mode
-                loadRealBalance();
-                
             } catch (error) {
-                showModalStatus('Connection failed: ' + error.message, 'error');
+                console.error('Wallet connect error:', error);
+                const rejected = error && (error.code === 4001 || /reject|cancel|denied/i.test(error.message || ''));
+                showModalStatus(rejected ? 'Request cancelled in wallet' : 'Connection failed: ' + error.message, 'error');
+                if (!sessionToken) disconnectWallet(true);
             }
         }
-        
-        function disconnectWallet() {
+
+        function disconnectWallet(silent) {
+            try { if (currentProvider && currentProvider.disconnect) currentProvider.disconnect(); } catch (e) { /* ignore */ }
+            clearSession();
             currentWallet = null;
             currentProvider = null;
             currentAddress = null;
-            isWalletVerified = false;
-            verificationSignature = null;
-            
+            authServerSocket();
+            for (const key in realLockedBoxes) delete realLockedBoxes[key];
+            lastAccountAsOf = 0;
+            applyAccount({ balance: 0, inPlay: 0, wins: 0, losses: 0, pnl: 0 });
+
             document.getElementById('walletStatusConnected').style.display = 'none';
             document.getElementById('walletStatusDisconnected').style.display = 'block';
             document.getElementById('walletMainBtn').classList.remove('connected');
             document.getElementById('walletMainText').textContent = 'Deposit / Withdraw';
             document.getElementById('historySection').style.display = 'none';
-            
-            document.getElementById('verificationSection').classList.remove('verified');
-            document.getElementById('verificationStatus').innerHTML = 'Please verify wallet ownership to request withdrawals';
-            document.getElementById('verifyBtn').style.display = 'block';
-            document.getElementById('withdrawFormFields').style.display = 'none';
-            
-            showModalStatus('Wallet disconnected', 'info');
+            document.getElementById('walletBalanceHint').classList.remove('show');
+            if (!silent) showModalStatus('Wallet disconnected', 'info');
         }
-        
-        // Wallet Verification
-        function checkWalletVerification() {
-            const savedSig = sessionStorage.getItem('walletVerified_' + currentAddress.toLowerCase());
-            if (savedSig) {
-                isWalletVerified = true;
-                verificationSignature = savedSig;
-                showVerifiedUI();
+
+        // Reconnect silently if the wallet already trusts this site and the session is still valid.
+        async function tryEagerConnect() {
+            for (const type of Object.keys(SOLANA_WALLETS)) {
+                const provider = SOLANA_WALLETS[type].get();
+                if (!provider || !provider.connect) continue;
+                try {
+                    const resp = await provider.connect({ onlyIfTrusted: true });
+                    const pk = (resp && resp.publicKey) || provider.publicKey;
+                    if (pk && storedSession(pk.toString())) {
+                        await connectWallet(type);
+                        return;
+                    }
+                } catch (e) { /* not trusted yet */ }
             }
         }
-        
-        async function verifyWallet() {
-            if (!currentAddress) {
-                showModalStatus('Please connect your wallet first', 'error');
-                return;
-            }
-            
-            const message = `Verify wallet ownership for BTC Grid\n\nWallet: ${currentAddress}\nTimestamp: ${Date.now()}`;
-            
-            try {
-                document.getElementById('verifyBtn').innerHTML = '<span class="loading-spinner"></span>Signing...';
-                
-                let signature;
-                if (currentWallet === 'phantom') {
-                    const encodedMessage = new TextEncoder().encode(message);
-                    const signedMessage = await currentProvider.signMessage(encodedMessage, 'utf8');
-                    signature = btoa(String.fromCharCode(...signedMessage.signature));
-                } else {
-                    signature = await currentProvider.request({
-                        method: 'personal_sign',
-                        params: [message, currentAddress]
-                    });
-                }
-                
-                verificationSignature = signature;
-                isWalletVerified = true;
-                sessionStorage.setItem('walletVerified_' + currentAddress.toLowerCase(), signature);
-                
-                await registerWalletVerification(signature);
-                
-                showVerifiedUI();
-                showModalStatus('Wallet verified!', 'success');
-                
-            } catch (error) {
-                showModalStatus('Verification failed: ' + error.message, 'error');
-                document.getElementById('verifyBtn').textContent = 'Sign Message to Verify';
+
+        // ================================================
+        // NETWORK / TOKEN (Solana USDC live; others coming soon)
+        // ================================================
+        function selectChain(chain) {
+            if (chain !== 'solana') {
+                const names = { ethereum: 'Ethereum', arbitrum: 'Arbitrum', base: 'Base', hyperliquid: 'Hyperliquid' };
+                return comingSoon(names[chain] || chain);
             }
         }
-        
-        async function registerWalletVerification(signature) {
-            try {
-                await fetch(SUPABASE_URL + '/rest/v1/wallet_verifications', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Prefer': 'return=minimal'
-                    },
-                    body: JSON.stringify({
-                        wallet_address: currentAddress.toLowerCase(),
-                        signature: signature,
-                        verified_at: new Date().toISOString()
-                    })
-                });
-            } catch (e) {
-                console.log('Verification registration:', e);
-            }
-        }
-        
-        function showVerifiedUI() {
-            document.getElementById('verificationSection').classList.add('verified');
-            document.getElementById('verificationStatus').innerHTML = 'Wallet verified!';
-            document.getElementById('verifyBtn').style.display = 'none';
-            document.getElementById('withdrawFormFields').style.display = 'block';
-            loadAvailableBalance();
-        }
-        
-        // Balance Functions
+
         async function checkWalletTokenBalance() {
             if (!currentAddress) return;
-            
             try {
-                let tokenBalance = 0;
-                
-                if (selectedChain === 'solana') {
-                    // Solana token balance check
-                    console.log('Checking Solana balance...');
-                    const phantom = window.phantom?.solana || window.solana;
-                    console.log('Phantom:', phantom);
-                    console.log('Phantom publicKey:', phantom?.publicKey?.toString());
-                    
-                    if (phantom && phantom.publicKey) {
-                        await loadSolanaWeb3();
-                        const { Connection, PublicKey } = window.solanaWeb3;
-                        const connection = new Connection(SOLANA_RPC, 'confirmed');
-                        
-                        const tokenMint = SOLANA_TOKEN_MINTS[selectedDepositToken];
-                        console.log('Token mint:', tokenMint);
-                        console.log('Selected token:', selectedDepositToken);
-                        
-                        if (tokenMint) {
-                            const mintPubkey = new PublicKey(tokenMint);
-                            console.log('Fetching token accounts for:', phantom.publicKey.toString());
-                            
-                            const tokenAccounts = await connection.getTokenAccountsByOwner(
-                                phantom.publicKey,
-                                { mint: mintPubkey }
-                            );
-                            
-                            console.log('Token accounts found:', tokenAccounts.value.length);
-                            
-                            if (tokenAccounts.value.length > 0) {
-                                const accountInfo = await connection.getTokenAccountBalance(
-                                    tokenAccounts.value[0].pubkey
-                                );
-                                console.log('Account info:', accountInfo);
-                                tokenBalance = parseFloat(accountInfo.value.uiAmount) || 0;
-                            }
-                        }
-                    } else {
-                        console.log('Phantom not connected or no publicKey');
-                    }
-                } else if (currentProvider) {
-                    // EVM token balance check
-                    const tokenAddress = TOKEN_CONTRACTS[selectedChain][selectedDepositToken];
-                    const balanceData = '0x70a08231' + currentAddress.slice(2).padStart(64, '0');
-                    
-                    const result = await currentProvider.request({
-                        method: 'eth_call',
-                        params: [{ to: tokenAddress, data: balanceData }, 'latest']
-                    });
-                    
-                    tokenBalance = parseInt(result, 16) / 1e6;
-                }
-                
-                console.log('Final token balance:', tokenBalance);
-                walletTokenBalance = tokenBalance;
-                
-                // Update wallet balance hint under amount input
-                const hintEl = document.getElementById('walletBalanceHint');
-                const hintValueEl = document.getElementById('walletBalanceHintValue');
-                if (hintEl && hintValueEl) {
-                    hintValueEl.textContent = tokenBalance.toFixed(2) + ' ' + selectedDepositToken;
-                    hintEl.classList.add('show');
-                }
-                
-                const depositAmount = parseFloat(document.getElementById('depositAmountInput').value) || 0;
-                document.getElementById('depositActionBtn').disabled = !currentAddress || depositAmount <= 0;
-                
+                const b = await api('/wallet-balance/' + currentAddress);
+                walletUsdc = b.usdc;
+                walletSol = b.sol;
+                document.getElementById('walletBalanceHintValue').textContent =
+                    b.usdc.toFixed(2) + ' USDC • ' + b.sol.toFixed(4) + ' SOL';
+                document.getElementById('walletBalanceHint').classList.add('show');
+                const amount = parseFloat(document.getElementById('depositAmountInput').value) || 0;
+                document.getElementById('depositActionBtn').disabled = !sessionToken || amount <= 0;
             } catch (error) {
                 console.error('Balance check error:', error);
-                const hintEl = document.getElementById('walletBalanceHint');
-                if (hintEl) hintEl.classList.remove('show');
+                document.getElementById('walletBalanceHint').classList.remove('show');
             }
         }
-        
-        // Set max deposit amount from wallet balance
+
         function setMaxDeposit() {
-            if (walletTokenBalance > 0) {
-                document.getElementById('depositAmountInput').value = walletTokenBalance.toFixed(2);
-                document.getElementById('depositActionBtn').disabled = false;
+            if (walletUsdc > 0) {
+                document.getElementById('depositAmountInput').value = (Math.floor(walletUsdc * 100) / 100).toFixed(2);
+                document.getElementById('depositActionBtn').disabled = !sessionToken;
             }
         }
-        
-        async function loadPlatformBalance() {
-            if (!currentAddress) return;
-            
-            try {
-                const depositsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=eq.confirmed',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const deposits = await depositsRes.json() || [];
-                
-                const withdrawalsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&status=neq.rejected',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const withdrawals = await withdrawalsRes.json() || [];
-                
-                let totalDeposited = 0;
-                let totalWithdrawn = 0;
-                
-                deposits.forEach(d => totalDeposited += parseFloat(d.amount) || 0);
-                withdrawals.forEach(w => {
-                    if (w.status === 'completed' || w.status === 'approved' || w.status === 'pending') {
-                        totalWithdrawn += parseFloat(w.amount) || 0;
-                    }
-                });
-                
-                platformBalance = totalDeposited - totalWithdrawn;
-                
-            } catch (error) {
-                console.error('Failed to load balance:', error);
-            }
+
+        function setMaxWithdraw() {
+            document.getElementById('withdrawAmountInput').value = (Math.floor(realBalance * 100) / 100).toFixed(2);
+            updateWithdrawButton();
         }
-        
-        async function loadAvailableBalance() {
-            if (!currentAddress) return;
-            
-            try {
-                // The available balance for withdrawal is the current real game balance
-                // This already accounts for deposits, withdrawals, wins, and losses
-                const available = Math.max(0, realBalance);
-                document.getElementById('availableWithdrawBalance').textContent = '$' + available.toFixed(2);
-                
-                const withdrawAmount = parseFloat(document.getElementById('withdrawAmountInput').value) || 0;
-                document.getElementById('withdrawActionBtn').disabled = !isWalletVerified || withdrawAmount <= 0 || withdrawAmount > available;
-                
-            } catch (error) {
-                document.getElementById('availableWithdrawBalance').textContent = 'Error';
-            }
+
+        function updateWithdrawButton() {
+            const btn = document.getElementById('withdrawActionBtn');
+            if (!btn) return;
+            const amount = parseFloat(document.getElementById('withdrawAmountInput').value) || 0;
+            btn.disabled = !sessionToken || amount <= 0 || amount > realBalance + 1e-9;
         }
-        
-        // =============================================
-        // SOLANA SPL TOKEN DEPOSIT
-        // =============================================
-        const TOKEN_PROGRAM_ID_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-        
-        async function executeSolanaDeposit(amount) {
-            const btn = document.getElementById('depositActionBtn');
-            
-            try {
-                const phantom = window.phantom?.solana || window.solana;
-                
-                if (!phantom || !phantom.isConnected) {
-                    throw new Error('Phantom wallet not connected');
-                }
-                
-                const tokenMint = SOLANA_TOKEN_MINTS[selectedDepositToken];
-                if (!tokenMint) {
-                    throw new Error('Invalid token for Solana. Use USDC or USDT.');
-                }
-                
-                const recipient = DEPOSIT_ADDRESSES.solana;
-                
-                showModalStatus('Loading Solana libraries...', 'info');
-                
-                await loadSolanaWeb3();
-                const { Connection, PublicKey, Transaction, TransactionInstruction } = window.solanaWeb3;
-                
-                const amountInUnits = BigInt(Math.floor(amount * 1e6));
-                
-                showModalStatus('Preparing transaction...', 'info');
-                
-                // Use Alchemy RPC for Solana (same API key as EVM)
-                const connection = new Connection(SOLANA_RPC, 'confirmed');
-                const senderPubkey = phantom.publicKey;
-                const TOKEN_PROGRAM_ID = new PublicKey(TOKEN_PROGRAM_ID_STR);
-                const mintPubkey = new PublicKey(tokenMint);
-                const recipientPubkey = new PublicKey(recipient);
-                
-                // Get sender's token account
-                const senderTokenAccounts = await connection.getTokenAccountsByOwner(senderPubkey, { mint: mintPubkey });
-                if (senderTokenAccounts.value.length === 0) {
-                    throw new Error(`No ${selectedDepositToken} token account found in your wallet`);
-                }
-                const senderTokenAccount = senderTokenAccounts.value[0].pubkey;
-                
-                // Get recipient's token account
-                const recipientTokenAccounts = await connection.getTokenAccountsByOwner(recipientPubkey, { mint: mintPubkey });
-                if (recipientTokenAccounts.value.length === 0) {
-                    throw new Error(`Recipient does not have a ${selectedDepositToken} token account`);
-                }
-                const recipientTokenAccount = recipientTokenAccounts.value[0].pubkey;
-                
-                // Build transfer instruction data
-                const dataBuffer = new ArrayBuffer(9);
-                const dataView = new DataView(dataBuffer);
-                dataView.setUint8(0, 3); // Transfer instruction
-                const lo = Number(amountInUnits & BigInt(0xFFFFFFFF));
-                const hi = Number((amountInUnits >> BigInt(32)) & BigInt(0xFFFFFFFF));
-                dataView.setUint32(1, lo, true);
-                dataView.setUint32(5, hi, true);
-                
-                const transferInstruction = new TransactionInstruction({
-                    keys: [
-                        { pubkey: senderTokenAccount, isSigner: false, isWritable: true },
-                        { pubkey: recipientTokenAccount, isSigner: false, isWritable: true },
-                        { pubkey: senderPubkey, isSigner: true, isWritable: false }
-                    ],
-                    programId: TOKEN_PROGRAM_ID,
-                    data: new Uint8Array(dataBuffer)
-                });
-                
-                const { blockhash } = await connection.getLatestBlockhash('confirmed');
-                
-                const transaction = new Transaction();
-                transaction.add(transferInstruction);
-                transaction.recentBlockhash = blockhash;
-                transaction.feePayer = senderPubkey;
-                
-                showModalStatus('Please approve transaction in Phantom...', 'info');
-                
-                const { signature } = await phantom.signAndSendTransaction(transaction);
-                const txHash = signature;
-                
-                showModalStatus('Transaction submitted: ' + txHash.slice(0, 20) + '...', 'success');
-                
-                btn.innerHTML = 'Deposit';
-                btn.disabled = false;
-                
-                // Monitor and verify via Edge Function
-                monitorSolanaTransaction(txHash, selectedDepositToken, amount);
-                
-            } catch (err) {
-                console.error('Solana deposit error:', err);
-                if (err.code === 4001 || err.message?.includes('User rejected')) {
-                    showModalStatus('Transaction cancelled', 'error');
-                } else {
-                    showModalStatus('Error: ' + err.message, 'error');
-                }
-                btn.innerHTML = 'Deposit';
-                btn.disabled = false;
-            }
-        }
-        
-        // Monitor Solana transaction and verify via Edge Function
-        async function monitorSolanaTransaction(txHash, token, amount) {
-            let attempts = 0;
-            const maxAttempts = 30;
-            
-            const check = async () => {
-                attempts++;
-                
-                try {
-                    await loadSolanaWeb3();
-                    const { Connection } = window.solanaWeb3;
-                    const connection = new Connection(SOLANA_RPC, 'confirmed');
-                    
-                    const status = await connection.getSignatureStatus(txHash);
-                    
-                    if (status?.value?.confirmationStatus === 'confirmed' || 
-                        status?.value?.confirmationStatus === 'finalized') {
-                        
-                        showModalStatus('Transaction confirmed! Verifying deposit...', 'info');
-                        
-                        // Verify on server
-                        setTimeout(() => monitorDeposit(txHash, 'solana', token, amount), 2000);
-                        return;
-                    }
-                    
-                    if (status?.value?.err) {
-                        showModalStatus('Transaction failed on chain', 'error');
-                        return;
-                    }
-                    
-                    if (attempts < maxAttempts) {
-                        setTimeout(check, 2000);
-                    } else {
-                        showModalStatus('Transaction verification timeout. Check manually.', 'error');
-                    }
-                    
-                } catch (error) {
-                    console.error('Monitor error:', error);
-                    if (attempts < maxAttempts) {
-                        setTimeout(check, 3000);
-                    }
-                }
-            };
-            
-            check();
-        }
-        
-        // Load Solana Web3 library dynamically
+
+        // ================================================
+        // DEPOSIT — USDC on Solana, with a memo the server requires
+        // ================================================
         async function loadSolanaWeb3() {
             if (window.solanaWeb3) return window.solanaWeb3;
-            
             return new Promise((resolve, reject) => {
                 const script = document.createElement('script');
-                script.src = 'https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js';
-                script.onload = () => {
-                    window.solanaWeb3 = window.solanaWeb3 || solanaWeb3;
-                    resolve(window.solanaWeb3);
-                };
+                script.src = 'https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.4/lib/index.iife.min.js';
+                script.onload = () => resolve(window.solanaWeb3);
                 script.onerror = () => reject(new Error('Failed to load Solana library'));
                 document.head.appendChild(script);
             });
         }
-        
-        // Deposit Function
+
+        async function signAndSend(tx) {
+            const out = await currentProvider.signAndSendTransaction(tx);
+            return typeof out === 'string' ? out : out.signature;
+        }
+
         async function executeDeposit() {
-            if (!currentAddress) {
+            if (!currentAddress || !sessionToken) {
                 showModalStatus('Please connect your wallet first', 'error');
                 return;
             }
-            
-            const amount = parseFloat(document.getElementById('depositAmountInput').value);
-            if (!amount || amount <= 0) {
-                showModalStatus('Please enter a valid amount', 'error');
-                return;
-            }
-            
+            const amount = Math.floor((parseFloat(document.getElementById('depositAmountInput').value) || 0) * 100) / 100;
             const btn = document.getElementById('depositActionBtn');
-            btn.innerHTML = '<span class="loading-spinner"></span>Processing...';
-            btn.disabled = true;
-            
             try {
-                if (selectedChain === 'solana') {
-                    // =============================================
-                    // SOLANA SPL TOKEN DEPOSIT
-                    // =============================================
-                    await executeSolanaDeposit(amount);
-                    return;
-                }
-                
-                const targetChainId = NETWORKS[selectedChain].chainId;
-                try {
-                    await currentProvider.request({
-                        method: 'wallet_switchEthereumChain',
-                        params: [{ chainId: targetChainId }]
-                    });
-                } catch (e) {
-                    if (e.code === 4902) {
-                        throw new Error('Please add ' + NETWORKS[selectedChain].chainName + ' to your wallet');
-                    }
-                }
-                
-                const tokenAddress = TOKEN_CONTRACTS[selectedChain][selectedDepositToken];
-                const recipient = DEPOSIT_ADDRESSES[selectedChain];
-                const amountInUnits = Math.floor(amount * 1e6);
-                
-                const methodId = '0xa9059cbb';
-                const paddedAddress = recipient.slice(2).toLowerCase().padStart(64, '0');
-                const paddedAmount = amountInUnits.toString(16).padStart(64, '0');
-                const data = methodId + paddedAddress + paddedAmount;
-                
-                const txParams = {
-                    to: tokenAddress,
-                    from: currentAddress,
-                    data: data,
-                    value: '0x0'
-                };
-                
-                try {
-                    const gas = await currentProvider.request({ method: 'eth_estimateGas', params: [txParams] });
-                    txParams.gas = gas;
-                } catch (e) {
-                    txParams.gas = '0x249F0';
-                }
-                
-                const txHash = await currentProvider.request({
-                    method: 'eth_sendTransaction',
-                    params: [txParams]
+                const cfg = await getServerConfig();
+                if (!cfg.vaultAddress) throw new Error('Deposits are not configured on the server yet');
+                if (!(amount >= cfg.minDeposit)) throw new Error('Minimum deposit is $' + cfg.minDeposit);
+                await checkWalletTokenBalance();
+                if (amount > walletUsdc + 1e-9) throw new Error('Not enough USDC in your wallet ($' + walletUsdc.toFixed(2) + ')');
+                if (walletSol < 0.003) throw new Error('Keep at least 0.003 SOL in your wallet for network fees');
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading-spinner"></span>Preparing...';
+                const web3 = await loadSolanaWeb3();
+                const { PublicKey, Transaction, TransactionInstruction, SystemProgram } = web3;
+                const TOKEN = new PublicKey(TOKEN_PROGRAM_ID_STR);
+                const ATA = new PublicKey(ATA_PROGRAM_ID_STR);
+                const owner = new PublicKey(currentAddress);
+                const mint = new PublicKey(cfg.usdcMint);
+                const vault = new PublicKey(cfg.vaultAddress);
+                const ata = (o) => PublicKey.findProgramAddressSync([o.toBuffer(), TOKEN.toBuffer(), mint.toBuffer()], ATA)[0];
+                const srcAta = ata(owner);
+                const dstAta = ata(vault);
+
+                // Create the vault's USDC account if needed (no-op once it exists).
+                const createAtaIx = new TransactionInstruction({
+                    programId: ATA,
+                    keys: [
+                        { pubkey: owner, isSigner: true, isWritable: true },
+                        { pubkey: dstAta, isSigner: false, isWritable: true },
+                        { pubkey: vault, isSigner: false, isWritable: false },
+                        { pubkey: mint, isSigner: false, isWritable: false },
+                        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+                        { pubkey: TOKEN, isSigner: false, isWritable: false },
+                    ],
+                    data: Uint8Array.from([1]), // CreateIdempotent
                 });
-                
-                showModalStatus('Transaction submitted! Verifying...', 'success');
-                
-                setTimeout(() => monitorDeposit(txHash, selectedChain, selectedDepositToken, amount), 3000);
-                
-            } catch (error) {
-                if (error.code === 4001) {
-                    showModalStatus('Transaction cancelled', 'info');
-                } else {
-                    showModalStatus('Error: ' + error.message, 'error');
-                }
+                const raw = BigInt(Math.round(amount * 1e6));
+                const data = new Uint8Array(10);
+                data[0] = 12; // TransferChecked
+                new DataView(data.buffer).setBigUint64(1, raw, true);
+                data[9] = 6;
+                const transferIx = new TransactionInstruction({
+                    programId: TOKEN,
+                    keys: [
+                        { pubkey: srcAta, isSigner: false, isWritable: true },
+                        { pubkey: mint, isSigner: false, isWritable: false },
+                        { pubkey: dstAta, isSigner: false, isWritable: true },
+                        { pubkey: owner, isSigner: true, isWritable: false },
+                    ],
+                    data,
+                });
+                const memoIx = new TransactionInstruction({
+                    programId: new PublicKey(MEMO_PROGRAM_ID_STR), keys: [], data: new TextEncoder().encode(cfg.depositMemo),
+                });
+
+                const tx = new Transaction().add(createAtaIx, transferIx, memoIx);
+                tx.feePayer = owner;
+                tx.recentBlockhash = (await api('/blockhash')).blockhash;
+
+                btn.innerHTML = '<span class="loading-spinner"></span>Approve in wallet...';
+                const signature = await signAndSend(tx);
+                showModalStatus('Deposit sent — waiting for Solana to finalize (~30s)', 'success');
+
+                const first = await api('/deposits', { method: 'POST', body: { signature } });
+                document.getElementById('depositAmountInput').value = '';
+                trackDeposit(signature, first);
+            } catch (err) {
+                console.error('Deposit error:', err);
+                const rejected = err && (err.code === 4001 || /reject|cancel|denied/i.test(err.message || ''));
+                showModalStatus(rejected ? 'Transaction cancelled' : 'Deposit failed: ' + err.message, 'error');
             } finally {
                 btn.innerHTML = 'Deposit';
                 btn.disabled = false;
             }
         }
-        
-        async function monitorDeposit(txHash, network, token, amount) {
-            let attempts = 0;
-            const maxAttempts = 30;
-            
-            const checkTx = async () => {
-                attempts++;
-                
-                try {
-                    const response = await fetch(SUPABASE_URL + '/functions/v1/verify-deposit', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': 'Bearer ' + SUPABASE_KEY
-                        },
-                        body: JSON.stringify({
-                            tx_hash: txHash,
-                            network: network,
-                            token: token,
-                            wallet_address: currentAddress
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showModalStatus('Deposit confirmed! +$' + result.amount.toFixed(2), 'success');
-                        loadPlatformBalance();
-                        loadHistory();
-                        document.getElementById('depositAmountInput').value = '';
-                        
-                        // Update real money balance for the game
-                        loadRealBalance();
-                        
-                        return;
-                    }
-                    
-                    if (result.reason === 'not_found' && attempts < maxAttempts) {
-                        setTimeout(checkTx, 5000);
-                    } else if (result.reason === 'duplicate') {
-                        showModalStatus('This transaction was already processed', 'info');
-                    } else {
-                        showModalStatus('Verification failed: ' + (result.error || 'Unknown error'), 'error');
-                    }
-                    
-                } catch (error) {
-                    if (attempts < maxAttempts) {
-                        setTimeout(checkTx, 5000);
-                    } else {
-                        showModalStatus('Verification timed out. Please contact support.', 'error');
-                    }
-                }
-            };
-            
-            checkTx();
+
+        // Poll until the server credits it. The server also finalizes on its own,
+        // so closing the tab now doesn't lose the deposit.
+        async function trackDeposit(signature, first) {
+            let r = first;
+            for (let i = 0; i < 45 && (!r || r.status === 'pending'); i++) {
+                await new Promise(res => setTimeout(res, 4000));
+                try { r = await api('/deposits/' + signature); } catch (e) { /* keep polling */ }
+            }
+            if (r && (r.status === 'credited' || r.status === 'already')) {
+                showModalStatus('Deposit credited' + (r.amount ? ': $' + r.amount.toFixed(2) : ''), 'success');
+                refreshAccount();
+                checkWalletTokenBalance();
+                loadHistory();
+            } else if (r && r.status === 'rejected') {
+                showModalStatus('Deposit not credited: ' + r.reason, 'error');
+                loadHistory();
+            } else {
+                showModalStatus('Still confirming — it will be credited automatically when Solana finalizes it', 'info');
+            }
         }
-        
-        // Withdraw Function
+
+        // ================================================
+        // WITHDRAW — paid on-chain by the server, bound to a signed amount
+        // ================================================
         async function executeWithdraw() {
-            if (!currentAddress || !isWalletVerified) {
-                showModalStatus('Please verify your wallet first', 'error');
-                return;
-            }
-            
-            const amount = parseFloat(document.getElementById('withdrawAmountInput').value);
-            if (!amount || amount < 1) {
-                showModalStatus('Minimum withdrawal is $1', 'error');
-                return;
-            }
-            
+            if (!sessionToken) { showModalStatus('Please connect your wallet first', 'error'); return; }
+            const amount = Math.floor((parseFloat(document.getElementById('withdrawAmountInput').value) || 0) * 100) / 100;
             const btn = document.getElementById('withdrawActionBtn');
-            btn.innerHTML = '<span class="loading-spinner"></span>Submitting...';
-            btn.disabled = true;
-            
             try {
-                const response = await fetch(SUPABASE_URL + '/functions/v1/submit-withdrawal', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    },
-                    body: JSON.stringify({
-                        wallet_address: currentAddress,
-                        amount: amount,
-                        token: selectedWithdrawToken,
-                        network: selectedChain,
-                        verification_signature: verificationSignature
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showModalStatus('Withdrawal request submitted!', 'success');
-                    document.getElementById('withdrawAmountInput').value = '';
-                    loadAvailableBalance();
-                    loadPlatformBalance();
-                    loadHistory();
-                } else {
-                    showModalStatus('Error: ' + result.error, 'error');
-                }
-                
-            } catch (error) {
-                showModalStatus('Error: ' + error.message, 'error');
+                const cfg = await getServerConfig();
+                if (!(amount >= cfg.minWithdraw)) throw new Error('Minimum withdrawal is $' + cfg.minWithdraw);
+                if (amount > realBalance + 1e-9) throw new Error('Insufficient balance');
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading-spinner"></span>Sign to confirm...';
+                const authMessage = actionMessage('withdraw', { Amount: amount.toFixed(2) });
+                const authSignature = await signText(authMessage);
+                btn.innerHTML = '<span class="loading-spinner"></span>Sending USDC...';
+                const r = await api('/withdraw', { method: 'POST', body: { amount, authMessage, authSignature } });
+                showModalStatus('Withdrawn $' + r.amount.toFixed(2) + ' USDC to your wallet', 'success');
+                document.getElementById('withdrawAmountInput').value = '';
+                refreshAccount();
+                checkWalletTokenBalance();
+                loadHistory();
+            } catch (err) {
+                const rejected = err && (err.code === 4001 || /reject|cancel|denied/i.test(err.message || ''));
+                showModalStatus(rejected ? 'Withdrawal cancelled' : 'Withdrawal failed: ' + err.message, 'error');
+                refreshAccount();
             } finally {
-                btn.innerHTML = 'Request Withdrawal';
-                btn.disabled = false;
+                btn.innerHTML = 'Withdraw to my wallet';
+                updateWithdrawButton();
             }
         }
-        
-        // History
+
+        // ================================================
+        // HISTORY
+        // ================================================
         async function loadHistory() {
-            if (!currentAddress) return;
-            
+            if (!sessionToken) return;
             document.getElementById('historySection').style.display = 'block';
-            
             try {
-                const depositsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/deposits?wallet_address=eq.' + currentAddress.toLowerCase() + '&order=created_at.desc&limit=10',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const deposits = await depositsRes.json() || [];
-                
-                const withdrawalsRes = await fetch(
-                    SUPABASE_URL + '/rest/v1/withdrawal_requests?wallet_address=eq.' + currentAddress.toLowerCase() + '&order=created_at.desc&limit=10',
-                    { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-                );
-                const withdrawals = await withdrawalsRes.json() || [];
-                
-                let items = [];
-                
-                deposits.forEach(d => {
-                    items.push({
-                        type: 'deposit',
-                        amount: parseFloat(d.amount),
-                        token: d.token,
-                        status: d.status,
-                        date: new Date(d.created_at)
-                    });
-                });
-                
-                withdrawals.forEach(w => {
-                    items.push({
-                        type: 'withdrawal',
-                        amount: parseFloat(w.amount),
-                        token: w.token,
-                        status: w.status,
-                        date: new Date(w.created_at)
-                    });
-                });
-                
-                items.sort((a, b) => b.date - a.date);
-                items = items.slice(0, 10);
-                
+                const { items } = await api('/history');
                 const listEl = document.getElementById('historyList');
-                
-                if (items.length === 0) {
+                if (!items.length) {
                     listEl.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No transactions yet</div>';
-                } else {
-                    listEl.innerHTML = items.map(item => `
+                    return;
+                }
+                listEl.innerHTML = items.map(item => {
+                    const date = new Date(item.date);
+                    const isDep = item.type === 'deposit';
+                    const amt = item.amount === null ? '—' : (isDep ? '+' : '-') + '$' + item.amount.toFixed(2);
+                    const link = item.signature
+                        ? `<a href="https://solscan.io/tx/${encodeURIComponent(item.signature)}" target="_blank" rel="noopener" style="color:#00d4ff;text-decoration:none;">view</a>`
+                        : '';
+                    return `
                         <div class="history-item">
                             <div class="history-item-left">
-                                <div class="history-item-icon ${item.type}">
-                                    ${item.type === 'deposit' ? '↓' : '↑'}
-                                </div>
+                                <div class="history-item-icon ${isDep ? 'deposit' : 'withdrawal'}">${isDep ? '↓' : '↑'}</div>
                                 <div>
-                                    <div class="history-item-type">${item.type === 'deposit' ? 'Deposit' : 'Withdrawal'}</div>
-                                    <div class="history-item-date">${item.date.toLocaleDateString()} ${item.date.toLocaleTimeString()}</div>
+                                    <div class="history-item-type">${isDep ? 'Deposit' : 'Withdrawal'} ${link}</div>
+                                    <div class="history-item-date">${escapeHtml(date.toLocaleDateString())} ${escapeHtml(date.toLocaleTimeString())}</div>
                                 </div>
                             </div>
                             <div style="text-align: right;">
-                                <div class="history-item-amount ${item.type}">
-                                    ${item.type === 'deposit' ? '+' : '-'}$${item.amount.toFixed(2)}
-                                </div>
-                                <span class="history-item-status ${item.status}">${item.status}</span>
+                                <div class="history-item-amount ${isDep ? 'deposit' : 'withdrawal'}">${escapeHtml(amt)}</div>
+                                <span class="history-item-status ${escapeHtml(item.status)}" title="${escapeHtml(item.reason || '')}">${escapeHtml(item.status)}</span>
                             </div>
-                        </div>
-                    `).join('');
-                }
-                
+                        </div>`;
+                }).join('');
             } catch (error) {
                 console.error('History load error:', error);
             }
         }
-        
+
         // Input validation for modal
         document.getElementById('depositAmountInput').addEventListener('input', function() {
             const amount = parseFloat(this.value) || 0;
-            document.getElementById('depositActionBtn').disabled = !currentAddress || amount <= 0;
+            document.getElementById('depositActionBtn').disabled = !sessionToken || amount <= 0;
         });
-        
-        document.getElementById('withdrawAmountInput').addEventListener('input', function() {
-            loadAvailableBalance();
-        });
-        
+
+        document.getElementById('withdrawAmountInput').addEventListener('input', updateWithdrawButton);
+
         // Close modal on escape key
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeDepositModal();
-            }
+            if (e.key === 'Escape') closeDepositModal();
         });
-        
+
         // Close modal on backdrop click
         document.getElementById('depositModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeDepositModal();
-            }
+            if (e.target === this) closeDepositModal();
         });
+
+        tryEagerConnect();
     </script>
     
     <!-- Toast Container -->

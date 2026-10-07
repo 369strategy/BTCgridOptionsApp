@@ -1,0 +1,12 @@
+{
+  "name": "btc-grid",
+  "private": true,
+  "description": "Deploy shim: Railway builds from the repo root so the server can serve index.html and assets/; the backend lives in server/",
+  "scripts": {
+    "build": "npm install --prefix server --omit=optional",
+    "start": "npm start --prefix server"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>BTC Grid Admin</title>
+<style>
+    :root { --bg: #0a0a0f; --card: #12121a; --line: #2a2a3a; --muted: #8888aa; --ok: #00ff88; --bad: #ff4466; --accent: #00d4ff; --warn: #ffc800; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: #fff; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin-bottom: 20px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .card h2 { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+    .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat .v { font: 600 18px/1.3 monospace; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+    button { background: linear-gradient(135deg, #00d4ff, #00ff88); color: #000; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: #1a1a2e; color: #fff; border: 1px solid var(--line); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input { background: var(--bg); color: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 15px monospace; width: 160px; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    code { background: #1a1a2e; padding: 2px 6px; border-radius: 4px; word-break: break-all; }
+    #msg { min-height: 22px; margin: 8px 0 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+    <h1>BTC Grid — Admin</h1>
+    <div class="sub">Owner wallets only (ADMIN_WALLETS on the server). Every change is signed by your wallet.</div>
+
+    <div class="row">
+        <button id="connectBtn" onclick="connect()">Connect Phantom</button>
+        <span id="who" class="sub" style="margin:0"></span>
+    </div>
+    <div id="msg"></div>
+
+    <div id="panel" style="display:none">
+        <div class="card">
+            <h2>Solvency</h2>
+            <div class="grid" id="solvency"></div>
+            <p class="sub" style="margin:12px 0 0">
+                Fund the house bankroll by sending USDC on Solana from an admin wallet to the vault
+                <code id="vaultAddr"></code> — a plain wallet Send works; it is credited within a minute.
+                Keep ~0.05 SOL in the vault for withdrawal fees.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Withdraw house profit</h2>
+            <div class="row">
+                <input id="houseAmt" type="number" min="1" step="0.01" placeholder="0.00">
+                <button onclick="houseWithdraw()">Withdraw to my wallet</button>
+                <span class="sub" style="margin:0">Free: <b id="houseFree">—</b> (the rest backs open bets)</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Switches</h2>
+            <div class="row">
+                <button class="secondary" id="betsBtn" onclick="toggleFlag('betsPaused')"></button>
+                <button class="secondary" id="wdBtn" onclick="toggleFlag('withdrawalsPaused')"></button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Withdrawals held for review</h2>
+            <div id="review" class="sub" style="margin:0">None</div>
+        </div>
+    </div>
+</main>
+<script>
+    let provider = null, wallet = null, token = null, status = null;
+    const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    function b58(bytes) {
+        const d = [0];
+        for (const byte of bytes) {
+            let c = byte;
+            for (let j = 0; j < d.length; j++) { c += d[j] << 8; d[j] = c % 58; c = (c / 58) | 0; }
+            while (c) { d.push(c % 58); c = (c / 58) | 0; }
+        }
+        let out = '';
+        for (const byte of bytes) { if (byte === 0) out += '1'; else break; }
+        for (let k = d.length - 1; k >= 0; k--) out += B58[d[k]];
+        return out;
+    }
+    const $ = (id) => document.getElementById(id);
+    const money = (x) => '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function say(text, cls) { $('msg').className = cls || ''; $('msg').textContent = text; }
+
+    async function sign(action, extra = {}) {
+        let m = `BTC Grid\nAction: ${action}\nWallet: ${wallet}\nTimestamp: ${Date.now()}`;
+        for (const [k, v] of Object.entries(extra)) m += `\n${k}: ${v}`;
+        const out = await provider.signMessage(new TextEncoder().encode(m), 'utf8');
+        const sig = out instanceof Uint8Array ? out : out.signature;
+        return { message: m, signature: b58(sig) };
+    }
+
+    async function api(path, opts = {}) {
+        const res = await fetch('/api' + path, {
+            method: opts.method || 'GET',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+            body: opts.body ? JSON.stringify(opts.body) : undefined,
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || 'HTTP ' + res.status);
+        return json;
+    }
+
+    async function connect() {
+        provider = (window.phantom && window.phantom.solana) || window.solana;
+        if (!provider) return say('Phantom not found', 'bad');
+        try {
+            const r = await provider.connect();
+            wallet = r.publicKey.toString();
+            const { message, signature } = await sign('login');
+            const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wallet, message, signature }) });
+            const j = await res.json();
+            if (!res.ok) throw new Error(j.error);
+            if (!j.isAdmin) throw new Error('This wallet is not in ADMIN_WALLETS');
+            token = j.token;
+            $('who').textContent = wallet;
+            $('connectBtn').style.display = 'none';
+            $('panel').style.display = 'block';
+            say('');
+            await load();
+            setInterval(load, 15000);
+        } catch (e) { say(e.message, 'bad'); }
+    }
+
+    async function load() {
+        status = await api('/admin/status');
+        const L = status.ledger;
+        const stats = [
+            ['Vault USDC (on-chain)', money(status.onChain.usdc)],
+            ['Owed (players + stakes + house)', money(status.owed)],
+            ['Solvent', status.solvent ? '<span class="ok">YES</span>' : '<span class="bad">NO — investigate</span>'],
+            ['Vault SOL (fees)', status.onChain.sol === null ? '—' : status.onChain.sol.toFixed(4) + (status.onChain.sol < 0.01 ? ' <span class="warn">low</span>' : '')],
+            ['Player balances', money(L.player)],
+            ['Open stakes (escrow)', money(L.escrow)],
+            ['House bankroll', money(L.house)],
+            ['Open exposure', money(status.exposure)],
+            ['Feed', status.feed.source + (status.feed.live ? ' <span class="ok">live</span>' : ' <span class="bad">down</span>')],
+            ['House edge', Math.round(status.config.houseEdge * 100) + '%'],
+        ];
+        $('solvency').innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+        $('vaultAddr').textContent = status.vaultAddress || '(not configured)';
+        $('houseFree').textContent = money(Math.max(0, status.houseFree));
+        $('betsBtn').textContent = status.flags.betsPaused ? 'Resume betting' : 'Pause betting';
+        $('wdBtn').textContent = status.flags.withdrawalsPaused ? 'Resume withdrawals' : 'Pause withdrawals';
+        const rv = status.withdrawalsInReview;
+        $('review').innerHTML = !rv.length ? 'None' : '<table><tr><th>ID</th><th>Wallet</th><th>Amount</th><th>Signature</th></tr>'
+            + rv.map(w => `<tr><td>${w.id}</td><td><code>${w.wallet}</code></td><td>${money(w.amount)}</td><td>${w.signature ? `<a style="color:#00d4ff" target="_blank" rel="noopener" href="https://solscan.io/tx/${encodeURIComponent(w.signature)}">check on Solscan</a>` : '—'}</td></tr>`).join('')
+            + '</table><p class="sub">Unknown-outcome payouts. Check the signature on-chain before doing anything: if it landed, the user was paid.</p>';
+    }
+
+    async function houseWithdraw() {
+        const amount = Math.floor((parseFloat($('houseAmt').value) || 0) * 100) / 100;
+        if (!(amount > 0)) return say('Enter an amount', 'bad');
+        try {
+            const s = await sign('house_withdraw', { Amount: amount.toFixed(2) });
+            const r = await api('/admin/house/withdraw', { method: 'POST', body: { amount, authMessage: s.message, authSignature: s.signature } });
+            say('Sent ' + money(r.amount) + ' — ' + r.signature, 'ok');
+            $('houseAmt').value = '';
+            await load();
+        } catch (e) { say(e.message, 'bad'); }
+    }
+
+    async function toggleFlag(key) {
+        const value = !status.flags[key];
+        try {
+            const s = await sign('set_flag', { Flag: key, Value: String(value) });
+            await api('/admin/flags', { method: 'POST', body: { key, value, authMessage: s.message, authSignature: s.signature } });
+            say((value ? 'Paused ' : 'Resumed ') + (key === 'betsPaused' ? 'betting' : 'withdrawals'), 'ok');
+            await load();
+        } catch (e) { say(e.message, 'bad'); }
+    }
+</script>
+</body>
+</html>

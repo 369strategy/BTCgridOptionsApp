@@ -1,0 +1,4 @@
+node_modules/
+server/dev.sqlite
+server/.env
+.env
