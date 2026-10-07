@@ -142,6 +142,7 @@ class PriceFeed extends EventEmitter {
           .map(k => ({ time: Number(k[0]) + 1000, price: Number(k[4]) }))
           .filter(pt => pt.time < firstLive && pt.time >= cutoff && pt.price > 0);
         this.history = points.concat(this.history);
+        this.emit('backfill', points);
         console.log(`[feed] backfilled ${points.length}s of history from ${host}`);
         return;
       } catch (err) {

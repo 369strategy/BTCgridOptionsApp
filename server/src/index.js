@@ -5,6 +5,7 @@ const cors = require('cors');
 const config = require('./config');
 const db = require('./db');
 const feed = require('./priceFeed');
+const twap = require('./twap');
 const game = require('./game');
 const deposits = require('./deposits');
 const realtime = require('./realtime');
@@ -15,6 +16,7 @@ const ROOT = path.join(__dirname, '..', '..'); // repo root: index.html, assets/
 async function main() {
   await db.init();
   await game.start();
+  twap.start();
   feed.start();
   deposits.start();
 

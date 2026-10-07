@@ -8,6 +8,10 @@ const GAME = {
   PRICE_PER_CELL: 10,      // $10 per row
   MS_PER_CELL: 10000,      // 10 seconds per column
 
+  // The game's price is the 60-second TWAP of Binance trades (twap.js), so a
+  // momentary spike on one trade can't touch a cell. Must match index.html.
+  TWAP_WINDOW_S: 60,
+
   // Bets are only accepted on columns that start at least this far in the future
   // (same rule the UI enforces), and no further out than the simulated horizon.
   MIN_LEAD_MS: 10000,

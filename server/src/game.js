@@ -9,6 +9,7 @@ const { sequelize, Bet, Setting } = require('./db');
 const ledger = require('./ledger');
 const feed = require('./priceFeed');
 const pricing = require('./pricing');
+const twap = require('./twap');
 
 const { GAME } = config;
 const events = new EventEmitter(); // 'bet' (wallet, payload), 'account' (wallet)
@@ -153,6 +154,11 @@ async function placeBets(wallet, requests) {
     if (seen.has(cell)) { rejected.push({ cell, reason: 'Duplicate cell' }); continue; }
     seen.add(cell);
     if (parsed.cellTs - now < GAME.MIN_LEAD_MS) { rejected.push({ cell, reason: 'Too late — that column is closing' }); continue; }
+    // The column's TWAP depends on the 60s before it. If that stretch already
+    // had a feed outage (or our startup), the bet could only end up void.
+    if (feed.hadGap(parsed.cellTs - GAME.TWAP_WINDOW_S * 1000, now)) {
+      rejected.push({ cell, reason: 'Price history warming up after an interruption — try a later column' }); continue;
+    }
     if (!(amount >= GAME.MIN_BET) || amount > GAME.MAX_BET) {
       rejected.push({ cell, reason: `Stake must be $${GAME.MIN_BET}–$${GAME.MAX_BET}` }); continue;
     }
@@ -260,7 +266,9 @@ async function settle(snap, outcome, evidence = {}) {
   }
 }
 
-function onTick(t, p) {
+// Settlement runs on the published 60s TWAP points (twap.js), one per second:
+// a bet wins if a point stamped inside its column lands in its $10 band.
+function onTwap(t, p) {
   for (const snap of open.values()) {
     if (snap.settling || snap.pending) continue;
     const end = snap.cellTs + GAME.MS_PER_CELL;
@@ -280,8 +288,9 @@ function sweep() {
     if (snap.pending) { settle(snap, snap.pending.outcome, snap.pending.evidence); continue; }
     const end = snap.cellTs + GAME.MS_PER_CELL;
     if (now < end + GAME.SETTLE_GRACE_MS) continue;
-    if (feed.hadGap(snap.cellTs, end)) {
-      settle(snap, 'void', { voidReason: 'Price feed interrupted during this column — stake refunded' });
+    // The column's TWAP points cover live prices from 60s before it starts.
+    if (feed.hadGap(snap.cellTs - GAME.TWAP_WINDOW_S * 1000, end)) {
+      settle(snap, 'void', { voidReason: 'Price feed interrupted while this column was being priced — stake refunded' });
     } else {
       settle(snap, 'lost');
     }
@@ -304,7 +313,7 @@ function onSource({ source }) {
 async function start() {
   await loadFlags();
   await loadOpenBets();
-  feed.on('tick', onTick);
+  twap.on('twap', onTwap);
   feed.on('source', onSource);
   setInterval(sweep, 250);
 }

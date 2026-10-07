@@ -9,16 +9,25 @@ Runs on Railway (project `btc-grid`, service `btc-grid`, Postgres), serves
 ## What it does
 
 - **Price feed** — one continuous Binance trade stream (futures first; if it is
-  silent from the server's region it switches to spot for the process lifetime).
-  Every browser gets the same ticks over `/ws`, so the screen shows exactly what
-  bets are settled on.
-- **Odds** — the Monte Carlo model the browser used to run, now on the server.
+  silent from the server's region it switches to spot for the process lifetime),
+  plus the best bid/ask stream as a heartbeat so quiet markets aren't outages.
+- **The game's price is a 60-second TWAP** (`src/twap.js`): each second is the
+  time-weighted average trade price of that second, and the TWAP published at
+  every second boundary is the mean of the last 60. A one-trade spike counts for
+  a sliver of 1/60, so it can't touch a cell. Odds, results and the chart line
+  all use exactly these published points; live trades are shown as a faint line.
+- **Odds** — the browser's old Monte Carlo model, now on the server and run on
+  the TWAP: each path simulates the live price and rolls the 60-second average
+  forward from the seconds that already happened, so near columns (mostly
+  decided) are priced correctly. Calibrated against hours of real Binance data.
   Bets are priced off a simulation at most 500ms old; a player is filled at
   `min(what they saw, fresh quote)`, and refused if the quote fell >20%.
 - **Bets** — need a wallet-signed session. The server checks timing (column must
   start ≥10s out), stake limits, the player's balance, and house exposure, and
-  settles every bet from its own ticks, storing the touching tick (wins) or the
-  window's high/low (losses) as evidence. Feed outages void bets (refund).
+  settles every bet from its own TWAP points, storing the touching point (wins)
+  or the column's TWAP range (losses) as evidence. A feed outage in the 60s
+  before a column or during it voids (refunds) its bets, and such bets are
+  refused upfront — including for ~70s after every server restart.
 - **Money** (ported from perfect-nature / User-Gacha) — double-entry ledger,
   on-chain deposit verification with a required memo, replay guard, background
   finalizer + reconciler, and withdrawals that reserve first, then refund only

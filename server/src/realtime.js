@@ -2,6 +2,8 @@
 // screen shows exactly the prices and odds the server settles on:
 //   hello   on connect: server clock, grid geometry, feed source, recent ticks
 //   ticks   every 100ms: all Binance ticks since the last batch [[t, p], ...]
+//           (the faint live line; the game itself runs on the TWAP)
+//   twap    every second: the published 60s TWAP point — the game's price
 //   grid    every 1s: current server multipliers per cell
 //   feed    when the source changes (futures -> spot)
 //   account / bet   per signed-in wallet (after {type:'auth', token})
@@ -9,6 +11,7 @@ const WebSocket = require('ws');
 const config = require('./config');
 const feed = require('./priceFeed');
 const pricing = require('./pricing');
+const twap = require('./twap');
 const game = require('./game');
 const auth = require('./auth');
 
@@ -36,7 +39,7 @@ function gridMessage(sim) {
   for (const [k, q] of Object.entries(sim.quotes)) quotes[k] = q.mult;
   return {
     type: 'grid', st: Date.now(), simTime: sim.simTime, simPrice: sim.simPrice,
-    vol: sim.vol, jumpProb: sim.jumpProb, quotes,
+    simTwap: sim.simTwap, vol: sim.vol, jumpProb: sim.jumpProb, quotes,
   };
 }
 
@@ -82,9 +85,11 @@ function attach(server) {
       game: {
         pricePerCell: GAME.PRICE_PER_CELL, msPerCell: GAME.MS_PER_CELL, minLeadMs: GAME.MIN_LEAD_MS,
         houseEdge: GAME.HOUSE_EDGE, minBet: GAME.MIN_BET, maxBet: GAME.MAX_BET,
+        twapWindowS: GAME.TWAP_WINDOW_S,
         betsPaused: game.flags.betsPaused,
       },
       ticks: history,
+      twap: twap.points.map(pt => [pt.time, pt.price]),
     });
     if (pricing.latest) send(ws, gridMessage(pricing.latest));
 
@@ -109,6 +114,7 @@ function attach(server) {
   });
 
   feed.on('tick', (t, p) => { batch.push([t, p]); });
+  twap.on('twap', (t, v) => broadcast({ type: 'twap', st: Date.now(), t, v }));
   feed.on('source', () => broadcast({ type: 'feed', feed: feedState() }));
 
   setInterval(() => {

@@ -5,6 +5,7 @@ const { Bet, Withdrawal } = require('./db');
 const ledger = require('./ledger');
 const solana = require('./solana');
 const feed = require('./priceFeed');
+const twap = require('./twap');
 const game = require('./game');
 const deposits = require('./deposits');
 const withdrawals = require('./withdrawals');
@@ -32,7 +33,7 @@ router.use(byIp(600));
 router.get('/health', (req, res) => {
   res.json({
     ok: true,
-    feed: { source: feed.source, label: feed.label, live: feed.isLive(), price: feed.price, ticks: feed.tickCount },
+    feed: { source: feed.source, label: feed.label, live: feed.isLive(), price: feed.price, twap60s: twap.value, ticks: feed.tickCount },
     vaultConfigured: !!solana.vaultPubkey(),
     flags: game.flags,
     serverTime: Date.now(),

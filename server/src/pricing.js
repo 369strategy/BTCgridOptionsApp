@@ -1,10 +1,11 @@
-// Server-side odds. Same model the browser used before the merge (EMA
-// volatility with a 1.1x buffer + Merton jump diffusion, 5,000 paths, 1-second
-// steps, "touch" = the path enters the cell's $10 band during its 10s window),
-// so multipliers look the same — but the server computes them, and a bet is
-// always priced off a simulation no older than QUOTE_MAX_AGE_MS.
+// Server-side odds on the 60-second TWAP. The live-price model is the one the
+// browser used before the merge (EMA volatility with a 1.1x buffer + Merton
+// jump diffusion, 5,000 paths, 1-second steps); each path is then averaged
+// exactly like twap.js. A bet is always priced off a simulation no older than
+// QUOTE_MAX_AGE_MS.
 const config = require('./config');
 const feed = require('./priceFeed');
+const twap = require('./twap');
 
 const { GAME } = config;
 
@@ -108,14 +109,27 @@ function multiplierFor(prob) {
 const cellKey = (cellTs, level) => `${cellTs}_${level}`;
 
 /**
- * Simulate touch probabilities for the next HORIZON_CELLS columns and
- * 2*LEVELS_EACH_SIDE+1 rows around the current price. Columns don't overlap,
- * so at each 1s step at most one column is active — O(paths × steps).
+ * Touch probabilities of the 60-second TWAP for the next HORIZON_CELLS
+ * columns and 2*LEVELS_EACH_SIDE+1 rows around the current TWAP.
+ *
+ * Each path simulates the live price second by second (same volatility and
+ * jump model as before), turns each second into a bucket the way twap.js does,
+ * and rolls the 60-bucket average forward — starting from the buckets that
+ * have ALREADY happened. That known part is why near columns are nearly
+ * decided; pricing it in exactly is what keeps the odds fair.
+ *
+ * A TWAP point is published at every second boundary T (mean of buckets
+ * covering [T-60s, T)); a cell is touched if a point with T inside its column
+ * lands in its $10 band — the same rule game.js settles with.
  */
 function simulate() {
   const now = Date.now();
+  twap.closeUntil(now); // never price off a second that has ended but isn't closed
   const S0 = feed.price;
-  if (!S0) return null;
+  const W = GAME.TWAP_WINDOW_S;
+  const known = twap.buckets;
+  const part = twap.partial(now);
+  if (!S0 || twap.value === null || known.length < W || !part) return null;
 
   const { PRICE_PER_CELL: ppc, MS_PER_CELL: mpc, NUM_PATHS, HORIZON_CELLS, LEVELS_EACH_SIDE } = GAME;
   const vol = calculateVolatility(feed.history, now);
@@ -124,53 +138,70 @@ function simulate() {
   const volPerStep = vol * Math.sqrt(1 / (365 * 24 * 60 * 60));
   const drift = -0.5 * volPerStep * volPerStep;
 
-  const center = Math.round(S0 / ppc) * ppc;
+  const center = Math.round(twap.value / ppc) * ppc;
   const minLevel = center - LEVELS_EACH_SIDE * ppc;
   const maxLevel = center + LEVELS_EACH_SIDE * ppc;
   const nLevels = 2 * LEVELS_EACH_SIDE + 1;
 
+  // Future points: k = 1 closes the in-progress bucket (partly known).
+  const lastEnd = part.start; // end of the last completed bucket
   const currentCellStart = Math.floor(now / mpc) * mpc;
-  const cells = [];
-  for (let i = 0; i < HORIZON_CELLS; i++) {
-    const ts = currentCellStart + (i + 1) * mpc;
-    cells.push({
-      ts,
-      from: Math.max(0, Math.round((ts - now) / 1000)),
-      to: Math.round((ts + mpc - now) / 1000),
-    });
-  }
-  const maxSteps = cells[cells.length - 1].to;
-  // step -> column index (or -1)
+  const firstCell = currentCellStart + mpc;
+  const lastCellEnd = currentCellStart + (HORIZON_CELLS + 1) * mpc;
+  const maxSteps = Math.ceil((lastCellEnd - lastEnd) / 1000);
   const colAt = new Int16Array(maxSteps + 1).fill(-1);
-  cells.forEach((c, i) => { for (let s = c.from; s < c.to && s <= maxSteps; s++) colAt[s] = i; });
+  for (let k = 1; k <= maxSteps; k++) {
+    const T = lastEnd + k * 1000;
+    if (T >= firstCell && T < lastCellEnd) colAt[k] = Math.floor((T - firstCell) / mpc);
+  }
+
+  // Window = last W completed buckets, then the simulated ones.
+  const base = new Float64Array(W);
+  let baseSum = 0;
+  for (let i = 0; i < W; i++) {
+    base[i] = known[known.length - W + i].v;
+    baseSum += base[i];
+  }
+  const vals = new Float64Array(W + maxSteps);
+  const remainMs = Math.max(0, 1000 - part.knownMs);
 
   const hits = new Uint32Array(HORIZON_CELLS * nLevels);
   const touched = new Uint8Array(HORIZON_CELLS * nLevels);
 
   for (let path = 0; path < NUM_PATHS; path++) {
     touched.fill(0);
+    vals.set(base);
+    let sum = baseSum;
     let S = S0;
-    for (let step = 1; step <= maxSteps; step++) {
+    for (let k = 1; k <= maxSteps; k++) {
+      const prev = S;
       let jump = 0;
       if (Math.random() < jumpProb) jump = jumpMean + jumpVol * randomNormal();
       S *= Math.exp(drift + volPerStep * randomNormal() + jump);
-      const col = colAt[step];
+      // bucket value: time-average over the second (known part of the current one)
+      const v = k === 1
+        ? (part.knownSum + ((prev + S) / 2) * remainMs) / 1000
+        : (prev + S) / 2;
+      vals[W + k - 1] = v;
+      sum += v - vals[k - 1];
+      const col = colAt[k];
       if (col < 0) continue;
-      const level = Math.floor(S / ppc) * ppc;
+      const level = Math.floor((sum / W) / ppc) * ppc;
       if (level < minLevel || level > maxLevel) continue;
-      const k = col * nLevels + (level - minLevel) / ppc;
-      if (!touched[k]) { touched[k] = 1; hits[k]++; }
+      const idx = col * nLevels + (level - minLevel) / ppc;
+      if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
     }
   }
 
   const quotes = {};
   for (let c = 0; c < HORIZON_CELLS; c++) {
+    const ts = firstCell + c * mpc;
     for (let l = 0; l < nLevels; l++) {
       const prob = hits[c * nLevels + l] / NUM_PATHS;
-      quotes[cellKey(cells[c].ts, minLevel + l * ppc)] = { prob, mult: multiplierFor(prob) };
+      quotes[cellKey(ts, minLevel + l * ppc)] = { prob, mult: multiplierFor(prob) };
     }
   }
-  return { simTime: now, simPrice: S0, vol, jumpProb, quotes };
+  return { simTime: now, simPrice: S0, simTwap: twap.value, vol, jumpProb, quotes };
 }
 
 let latest = null;

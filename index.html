@@ -995,7 +995,7 @@
                 <div class="logo-icon">₿</div>
                 <div class="logo-text">
                     <h1 id="feedLabel">BTC/USDT</h1>
-                    <span>EMA VOLATILITY + JUMP DIFFUSION • 5K PATHS</span>
+                    <span>60s TWAP • EMA VOLATILITY + JUMP DIFFUSION • 5K PATHS</span>
                 </div>
             </div>
             <div class="header-right">
@@ -1037,11 +1037,12 @@
 
         <section class="price-section">
             <div class="main-price">
-                <div class="price-label">BTC Price</div>
+                <div class="price-label">BTC Price · 60s TWAP</div>
                 <div class="price-value" id="currentPrice">$--,---.--</div>
                 <div class="price-change">
                     <span class="change-badge positive" id="priceChange">+0.00%</span>
                     <span style="color: #8888aa; font-size: 14px;" id="priceChangeAbs">$0.00</span>
+                    <span style="color: #666680; font-size: 12px; margin-left: 8px;" id="livePrice" title="Latest Binance trade. Bets are decided on the 60-second TWAP, not on single trades."></span>
                 </div>
             </div>
             <div class="stats-grid">
@@ -1177,10 +1178,13 @@
 
         <div class="chart-container">
             <div class="chart-header">
-                <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> • 10 sec × $10 • Full View</h2>
+                <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> • 60s TWAP • 10 sec × $10 • Full View</h2>
                 <div class="chart-legend">
                     <div class="legend-item">
-                        <span style="width:12px;height:3px;background:#00d4ff;border-radius:2px;"></span> Price
+                        <span style="width:12px;height:3px;background:#00d4ff;border-radius:2px;"></span> 60s TWAP
+                    </div>
+                    <div class="legend-item">
+                        <span style="width:12px;height:2px;background:rgba(255,255,255,0.35);border-radius:2px;"></span> Live trades
                     </div>
                     <div class="legend-item">
                         <span style="width:3px;height:12px;background:#ffc800;border-radius:2px;"></span> NOW
@@ -1395,7 +1399,88 @@
         let price = null;
         let prevPrice = null;
         let startPrice = null;
-        let priceHistory = [];
+        let priceHistory = [];          // live Binance trades (faint line + volatility)
+
+        // ---------- 60-second TWAP: the game's price ----------
+        // Each second is one bucket: the time-weighted average of the trade price
+        // in that second. The TWAP published at second boundary T is the mean of
+        // the 60 buckets covering [T-60s, T). The server publishes the official
+        // points; this local copy (same algorithm) feeds the demo's odds and is
+        // the price when the server is unreachable.
+        const TWAP_WINDOW_S = 60;
+        let twapHistory = [];           // [{time, price}] one point per second
+        let twapPrice = null;
+        let twapFromServer = false;
+        let lastShownGamePrice = null;
+        function gamePrice() { return twapPrice !== null ? twapPrice : price; }
+
+        const localTwap = {
+            buckets: [], points: [], bStart: null, bSum: 0, lastT: null, lastP: null, onPoint: null,
+            onTick(t, p) {
+                if (this.lastP === null) {
+                    this.bStart = Math.floor(t / 1000) * 1000;
+                    this.lastT = this.bStart;
+                    this.lastP = p;
+                    this.bSum = 0;
+                }
+                this.closeUntil(t);
+                if (t > this.lastT) this.bSum += this.lastP * (t - this.lastT);
+                this.lastT = Math.max(this.lastT, t);
+                this.lastP = p;
+            },
+            closeUntil(now) {
+                if (this.lastP === null) return;
+                while (now >= this.bStart + 1000) {
+                    const end = this.bStart + 1000;
+                    this.bSum += this.lastP * (end - this.lastT);
+                    this.push(end, this.bSum / 1000);
+                    this.bStart = end;
+                    this.lastT = end;
+                    this.bSum = 0;
+                }
+            },
+            push(end, v) {
+                this.buckets.push({ t: end, v });
+                if (this.buckets.length > 900) this.buckets.splice(0, this.buckets.length - 900);
+                if (this.buckets.length < TWAP_WINDOW_S) return;
+                let sum = 0;
+                for (let i = this.buckets.length - TWAP_WINDOW_S; i < this.buckets.length; i++) sum += this.buckets[i].v;
+                const avg = sum / TWAP_WINDOW_S;
+                this.points.push({ time: end, price: avg });
+                if (this.points.length > 900) this.points.splice(0, this.points.length - 900);
+                if (this.onPoint) this.onPoint(end, avg);
+            },
+            partial(now) {
+                if (this.lastP === null) return null;
+                return { start: this.bStart, knownMs: now - this.bStart, knownSum: this.bSum + this.lastP * (now - this.lastT) };
+            },
+            // History from before our first live bucket: last price of each second.
+            seed(raw) {
+                const boundary = this.buckets.length ? this.buckets[0].t - 1000 : (this.bStart !== null ? this.bStart : Infinity);
+                const bySec = new Map();
+                for (const pt of raw) {
+                    const end = Math.ceil(pt.time / 1000) * 1000;
+                    if (end <= boundary) bySec.set(end, pt.price);
+                }
+                if (!bySec.size) return;
+                const ends = [...bySec.keys()].sort((a, b) => a - b);
+                const stop = Math.min(boundary, ends[ends.length - 1]);
+                const older = [];
+                let last = bySec.get(ends[0]);
+                for (let e = ends[0]; e <= stop; e += 1000) {
+                    if (bySec.has(e)) last = bySec.get(e);
+                    older.push({ t: e, v: last });
+                }
+                this.buckets = older.concat(this.buckets).slice(-900);
+                this.points = [];
+                let sum = 0;
+                for (let i = 0; i < this.buckets.length; i++) {
+                    sum += this.buckets[i].v;
+                    if (i >= TWAP_WINDOW_S) sum -= this.buckets[i - TWAP_WINDOW_S].v;
+                    if (i >= TWAP_WINDOW_S - 1) this.points.push({ time: this.buckets[i].t, price: sum / TWAP_WINDOW_S });
+                }
+            },
+        };
         let tradeCount = 0;
         let ws = null;
         let gridMultipliers = {};
@@ -2304,146 +2389,92 @@
             return estimatedJumpParams;
         }
 
-        // Monte Carlo simulation - tracks if price TOUCHES each cell during the minute
+        // Monte Carlo simulation of the 60s TWAP (demo odds; real-money odds come
+        // from the server, which runs the same model). Each path simulates the
+        // live price per second, turns it into buckets like localTwap, and rolls
+        // the 60-bucket average forward from the buckets that already happened.
         function runMonteCarloSimulation() {
             if (!price || simulationRunning) return;
             if (isRealMode) return; // real-money odds come from the server
+            const now = serverNow();
+            localTwap.closeUntil(now);
+            const W = TWAP_WINDOW_S;
+            const known = localTwap.buckets;
+            const part = localTwap.partial(now);
+            const twapNow = gamePrice();
+            if (known.length < W || !part || twapNow === null) return;
             simulationRunning = true;
 
             const NUM_PATHS = 5000;
-            const currentPrice = price;
+            const S0 = price;
             const vol = calculateVolatility();
             estimatedVolatility = vol;
-            
-            // Get adaptive jump parameters from recent price history
-            const jumpParams = estimateJumpParameters();
-            const jumpProb = jumpParams.jumpProb;
-            const jumpMean = jumpParams.jumpMean;
-            const jumpVol = jumpParams.jumpVol;
-            
+            const { jumpProb, jumpMean, jumpVol } = estimateJumpParameters();
+
             const pricePerCell = 10; // $10 per cell
             const msPerCell = 10000; // 10 seconds per cell
-            const now = serverNow();
-            
-            // Calculate time until each future cell boundary (10-second intervals)
+            const volPerStep = vol * Math.sqrt(1 / (365 * 24 * 60 * 60));
+            const drift = -0.5 * volPerStep * volPerStep;
+
+            const center = Math.round(twapNow / pricePerCell) * pricePerCell;
+            const nLevels = 11;
+            const minLevel = center - 5 * pricePerCell;
+            const maxLevel = center + 5 * pricePerCell;
+
+            const lastEnd = part.start;
             const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
-            
-            // Per-step volatility (1 second per step for fine granularity)
-            const dt = 1 / (365 * 24 * 60 * 60); // 1 second in years
-            const volPerStep = vol * Math.sqrt(dt);
-            
-            // Price levels to track (+/- $100 from current)
-            const centerPrice = Math.round(currentPrice / pricePerCell) * pricePerCell;
-            const priceLevels = [];
-            for (let i = -5; i <= 5; i++) {
-                priceLevels.push(centerPrice + i * pricePerCell);
+            const firstCell = currentCellStart + msPerCell;
+            const lastCellEnd = currentCellStart + 13 * msPerCell;
+            const maxSteps = Math.ceil((lastCellEnd - lastEnd) / 1000);
+            const colAt = new Int16Array(maxSteps + 1).fill(-1);
+            for (let k = 1; k <= maxSteps; k++) {
+                const T = lastEnd + k * 1000;
+                if (T >= firstCell && T < lastCellEnd) colAt[k] = Math.floor((T - firstCell) / msPerCell);
             }
-            
-            // Future cells with ACTIVE windows (when each cell can be touched)
-            const futureCells = [];
-            for (let i = 0; i < 12; i++) {
-                const cellStart = currentCellStart + (i + 1) * msPerCell;
-                const cellEnd = cellStart + msPerCell;
-                const stepsToStart = Math.max(0, Math.round((cellStart - now) / 1000));
-                const stepsToEnd = Math.round((cellEnd - now) / 1000);
-                futureCells.push({
-                    timestamp: cellStart,
-                    activeFromStep: stepsToStart,  // Cell becomes active at this step
-                    activeToStep: stepsToEnd       // Cell expires at this step
-                });
-            }
-            
-            // Initialize hit tracking
-            const hitCounts = {};
-            for (const cellData of futureCells) {
-                for (const pLevel of priceLevels) {
-                    hitCounts[`${cellData.timestamp}_${pLevel}`] = 0;
-                }
-            }
-            
-            // Total steps to simulate (until last cell expires)
-            const maxSteps = futureCells[futureCells.length - 1].activeToStep;
-            
-            // Run simulation - track TOUCHES during each cell's ACTIVE window
+
+            const base = new Float64Array(W);
+            let baseSum = 0;
+            for (let i = 0; i < W; i++) { base[i] = known[known.length - W + i].v; baseSum += base[i]; }
+            const vals = new Float64Array(W + maxSteps);
+            const remainMs = Math.max(0, 1000 - part.knownMs);
+
+            const hits = new Uint32Array(12 * nLevels);
+            const touched = new Uint8Array(12 * nLevels);
             for (let path = 0; path < NUM_PATHS; path++) {
-                let S = currentPrice;
-                
-                // Track which cells were touched in this path
-                const touchedThisPath = {};
-                for (const cellData of futureCells) {
-                    touchedThisPath[cellData.timestamp] = new Set();
-                }
-                
-                // Simulate entire path
-                for (let step = 1; step <= maxSteps; step++) {
-                    // Standard GBM component
-                    const drift = -0.5 * volPerStep * volPerStep;
-                    const shock = volPerStep * randomNormal();
-                    
-                    // Jump component (Merton jump-diffusion)
-                    let jumpComponent = 0;
-                    if (Math.random() < jumpProb) {
-                        jumpComponent = jumpMean + jumpVol * randomNormal();
-                    }
-                    
-                    // Combined price evolution
-                    S = S * Math.exp(drift + shock + jumpComponent);
-                    
-                    // Check which price level we're in
-                    const pLevel = Math.floor(S / pricePerCell) * pricePerCell;
-                    
-                    // Record touch for all cells that are ACTIVE at this step
-                    for (const cellData of futureCells) {
-                        if (step >= cellData.activeFromStep && step < cellData.activeToStep) {
-                            if (priceLevels.includes(pLevel)) {
-                                touchedThisPath[cellData.timestamp].add(pLevel);
-                            }
-                        }
-                    }
-                }
-                
-                // Count hits - each touched cell counts once per path
-                for (const cellData of futureCells) {
-                    for (const pLevel of touchedThisPath[cellData.timestamp]) {
-                        const key = `${cellData.timestamp}_${pLevel}`;
-                        if (hitCounts[key] !== undefined) {
-                            hitCounts[key]++;
-                        }
-                    }
+                touched.fill(0);
+                vals.set(base);
+                let sum = baseSum;
+                let S = S0;
+                for (let k = 1; k <= maxSteps; k++) {
+                    const prev = S;
+                    let jump = 0;
+                    if (Math.random() < jumpProb) jump = jumpMean + jumpVol * randomNormal();
+                    S *= Math.exp(drift + volPerStep * randomNormal() + jump);
+                    const v = k === 1 ? (part.knownSum + ((prev + S) / 2) * remainMs) / 1000 : (prev + S) / 2;
+                    vals[W + k - 1] = v;
+                    sum += v - vals[k - 1];
+                    const col = colAt[k];
+                    if (col < 0) continue;
+                    const level = Math.floor((sum / W) / pricePerCell) * pricePerCell;
+                    if (level < minLevel || level > maxLevel) continue;
+                    const idx = col * nLevels + (level - minLevel) / pricePerCell;
+                    if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
                 }
             }
-            
-            // Calculate multipliers
+
             const newMultipliers = {};
-            for (const cellData of futureCells) {
-                for (const pLevel of priceLevels) {
-                    const key = `${cellData.timestamp}_${pLevel}`;
-                    const hits = hitCounts[key] || 0;
-                    const prob = hits / NUM_PATHS;
-                    
-                    newMultipliers[key] = {
-                        probability: prob,
-                        cellTs: cellData.timestamp,
-                        priceLevel: pLevel,
-                        simTime: now,
-                        simPrice: currentPrice
+            for (let c = 0; c < 12; c++) {
+                const ts = firstCell + c * msPerCell;
+                for (let l = 0; l < nLevels; l++) {
+                    const pLevel = minLevel + l * pricePerCell;
+                    newMultipliers[`${ts}_${pLevel}`] = {
+                        probability: hits[c * nLevels + l] / NUM_PATHS,
+                        cellTs: ts, priceLevel: pLevel, simTime: now, simPrice: twapNow,
                     };
                 }
             }
-            
             gridMultipliers = newMultipliers;
             simulationRunning = false;
-            
-            // Debug: log probabilities for center price cells
-            const centerKey0 = `${futureCells[0].timestamp}_${centerPrice}`;
-            const centerKey1 = `${futureCells[1].timestamp}_${centerPrice}`;
-            const centerKey2 = `${futureCells[2].timestamp}_${centerPrice}`;
-            console.log('Cell probs at center price:', 
-                'Cell1:', (newMultipliers[centerKey0]?.probability * 100).toFixed(1) + '%',
-                'Cell2:', (newMultipliers[centerKey1]?.probability * 100).toFixed(1) + '%',
-                'Cell3:', (newMultipliers[centerKey2]?.probability * 100).toFixed(1) + '%',
-                '| Vol:', (vol * 100).toFixed(0) + '%'
-            );
         }
 
         // Get multiplier color
@@ -2470,7 +2501,7 @@
             // Movement factor: price movement REDUCES multipliers (favors house)
             // This prevents exploitation of stale multipliers after price moves
             const pricePerCell = 10;
-            const priceMoved = Math.abs(currentPrice - data.simPrice);
+            const priceMoved = Math.abs(gamePrice() - data.simPrice); // TWAP moved since the sim
             const movementFactor = Math.max(0.5, 1 - (priceMoved / pricePerCell) * 0.1);
             
             // Combined adjustment (capped to avoid extremes)
@@ -2490,17 +2521,21 @@
 
         // Update price display
         function updatePriceDisplay() {
-            if (!price) return;
-            currentPriceEl.textContent = '$' + formatPrice(price);
-            
-            if (prevPrice !== null) {
-                currentPriceEl.className = 'price-value ' + (price > prevPrice ? 'up' : price < prevPrice ? 'down' : '');
+            const gp = gamePrice();
+            if (!gp) return;
+            if (price) document.getElementById('livePrice').textContent = 'Live $' + formatPrice(price);
+            if (gp === lastShownGamePrice) return; // the TWAP moves once a second
+            currentPriceEl.textContent = '$' + formatPrice(gp);
+
+            if (lastShownGamePrice !== null) {
+                currentPriceEl.className = 'price-value ' + (gp > lastShownGamePrice ? 'up' : 'down');
                 setTimeout(() => currentPriceEl.className = 'price-value', 150);
             }
-            
+            lastShownGamePrice = gp;
+
             if (startPrice) {
-                const change = ((price - startPrice) / startPrice) * 100;
-                const changeAbs = price - startPrice;
+                const change = ((gp - startPrice) / startPrice) * 100;
+                const changeAbs = gp - startPrice;
                 priceChangeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
                 priceChangeEl.className = `change-badge ${change >= 0 ? 'positive' : 'negative'}`;
                 priceChangeAbsEl.textContent = `$${changeAbs >= 0 ? '+' : ''}${formatPrice(changeAbs)}`;
@@ -2677,9 +2712,23 @@
             ctx.fillStyle = 'rgba(255, 200, 0, 0.8)';
             ctx.fillText('NEXT 2 MIN ▶', padding.left + chartWidth * 0.6, padding.top + chartHeight + 38);
 
-            // Draw price line (RAW real-time data - no smoothing)
-            const recentHistory = priceHistory.filter(d => d.time >= timeStart && d.time <= now);
-            
+            // Live Binance trades: faint reference line (not the game price).
+            const rawHistory = priceHistory.filter(d => d.time >= timeStart && d.time <= now);
+            if (rawHistory.length > 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+                ctx.lineWidth = 1;
+                rawHistory.forEach((pt, i) => {
+                    const x = timeToX(pt.time), y = priceToY(pt.price);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            }
+
+            // The game price: the 60s TWAP (one point per second), extended to NOW.
+            const recentHistory = twapHistory.filter(d => d.time >= timeStart - 1000 && d.time <= now);
+            if (recentHistory.length && twapPrice !== null) recentHistory.push({ time: now, price: twapPrice });
+
             if (recentHistory.length > 1) {
                 // Gradient fill
                 const grad = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartHeight);
@@ -2687,41 +2736,26 @@
                 grad.addColorStop(0.5, 'rgba(0, 212, 255, 0.15)');
                 grad.addColorStop(1, 'rgba(0, 212, 255, 0)');
 
-                // Draw fill area
                 ctx.beginPath();
                 ctx.moveTo(timeToX(recentHistory[0].time), padding.top + chartHeight);
-                
-                for (let i = 0; i < recentHistory.length; i++) {
-                    const pt = recentHistory[i];
-                    ctx.lineTo(timeToX(pt.time), priceToY(pt.price));
-                }
-                
+                for (const pt of recentHistory) ctx.lineTo(timeToX(pt.time), priceToY(pt.price));
                 ctx.lineTo(timeToX(recentHistory[recentHistory.length - 1].time), padding.top + chartHeight);
                 ctx.closePath();
                 ctx.fillStyle = grad;
                 ctx.fill();
 
-                // Draw line
                 ctx.beginPath();
                 ctx.strokeStyle = '#00d4ff';
                 ctx.lineWidth = 2;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
-                
-                for (let i = 0; i < recentHistory.length; i++) {
-                    const pt = recentHistory[i];
-                    const x = timeToX(pt.time);
-                    const y = priceToY(pt.price);
-                    
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
+                recentHistory.forEach((pt, i) => {
+                    const x = timeToX(pt.time), y = priceToY(pt.price);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
                 ctx.stroke();
             }
-            
+
             // Current price dot with smooth pulse
             if (price) {
                 const pulse = Math.sin(serverNow() / 300) * 0.15 + 1;
@@ -3165,17 +3199,18 @@
                 lastFrameTime = currentTime;
                 
                 // Update smooth grid centering with spring physics
-                if (price !== null) {
+                const target = gamePrice();
+                if (target !== null) {
                     if (displayPrice === null) {
-                        displayPrice = price;
+                        displayPrice = target;
                     } else {
-                        const diff = price - displayPrice;
+                        const diff = target - displayPrice;
                         priceVelocity += diff * priceSmoothingFactor;
                         priceVelocity *= 0.6; // Lower damping = faster catch-up
                         displayPrice += priceVelocity;
                         
                         if (Math.abs(diff) < 0.01 && Math.abs(priceVelocity) < 0.01) {
-                            displayPrice = price;
+                            displayPrice = target;
                             priceVelocity = 0;
                         }
                     }
@@ -3287,8 +3322,9 @@
             tradeCountEl.textContent = tradeCount.toLocaleString();
             updatePriceDisplay();
 
-            // Demo bets settle locally; real bets are settled by the server.
-            checkLockedBoxTouches(newPrice, tickTime);
+            // Every trade feeds the local TWAP buckets. Bets settle on TWAP
+            // points (onTwapPoint), never on single trades.
+            localTwap.onTick(tickTime, newPrice);
         }
 
         function applyServerGrid(msg) {
@@ -3324,6 +3360,14 @@
             }
             // The server's 15-minute history is authoritative for the chart.
             seedHistory(msg.ticks.map(([t, p]) => ({ time: t, price: p })), true);
+            if (msg.twap && msg.twap.length) {
+                const pts = msg.twap.map(([t, p]) => ({ time: t, price: p }));
+                const last = pts[pts.length - 1].time;
+                twapHistory = pts.concat(twapHistory.filter(p => p.time > last));
+                twapPrice = twapHistory[twapHistory.length - 1].price;
+                twapFromServer = true;
+                updatePriceDisplay();
+            }
             if (msg.game.betsPaused) showToast('Real-money betting is paused by the operator', 'warning');
         }
 
@@ -3343,6 +3387,12 @@
             let drop = 0;
             while (drop < priceHistory.length && priceHistory[drop].time < cutoff) drop++;
             if (drop) priceHistory.splice(0, drop);
+            // Local TWAP buckets (demo odds) and, until the server sends its own, the TWAP line.
+            localTwap.seed(points);
+            if (!twapFromServer && localTwap.points.length) {
+                twapHistory = localTwap.points.slice();
+                twapPrice = twapHistory[twapHistory.length - 1].price;
+            }
             if (price === null && priceHistory.length) {
                 const lastPt = priceHistory[priceHistory.length - 1];
                 price = lastPt.price;
@@ -3361,6 +3411,21 @@
                 console.warn('History backfill failed:', e.message);
             }
         }
+
+        // A published 60s TWAP point: the game's price moves, demo bets settle.
+        function onTwapPoint(t, v) {
+            if (twapHistory.length && t <= twapHistory[twapHistory.length - 1].time) return;
+            twapHistory.push({ time: t, price: v });
+            const cutoff = t - 15 * 60 * 1000;
+            let drop = 0;
+            while (drop < twapHistory.length && twapHistory[drop].time < cutoff) drop++;
+            if (drop) twapHistory.splice(0, drop);
+            twapPrice = v;
+            checkLockedBoxTouches(v, t);
+            updatePriceDisplay();
+        }
+        // Local TWAP points only drive the game when the server is unreachable.
+        localTwap.onPoint = (t, v) => { if (directMode) onTwapPoint(t, v); };
 
         function onServerFeed(f) {
             if (f.label !== feedLabel) {
@@ -3401,6 +3466,7 @@
                         for (const [t, p] of msg.ticks) ingestPrice(p, t);
                         markServerLive();
                         break;
+                    case 'twap': syncClock(msg.st); twapFromServer = true; onTwapPoint(msg.t, msg.v); break;
                     case 'grid': applyServerGrid(msg); break;
                     case 'feed': onServerFeed(msg.feed); break;
                     case 'account': applyAccount(msg.account); break;
@@ -3614,6 +3680,7 @@
         setInterval(fetch24hStats, 60000);
         backfillHistory();
         connectServerFeed();
+        setInterval(() => localTwap.closeUntil(serverNow()), 100);
         requestAnimationFrame(animate);
         
         // Run simulation check every 300ms (simulation itself runs every 1s)
