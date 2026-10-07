@@ -3193,11 +3193,26 @@
             requestAnimationFrame(animate);
         }
 
-        // Fetch 24h stats
+        // Binance spot REST hosts, tried in order (the second is Binance's
+        // market-data-only host, reachable where the main one is region-blocked).
+        const BINANCE_REST_HOSTS = ['https://api.binance.com', 'https://data-api.binance.vision'];
+
+        async function binanceGet(path) {
+            let lastErr;
+            for (const host of BINANCE_REST_HOSTS) {
+                try {
+                    const res = await fetch(host + path);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return await res.json();
+                } catch (e) { lastErr = e; }
+            }
+            throw lastErr;
+        }
+
+        // Fetch 24h stats (spot — the same market the server settles on)
         async function fetch24hStats() {
             try {
-                const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT');
-                const data = await res.json();
+                const data = await binanceGet('/api/v3/ticker/24hr?symbol=BTCUSDT');
                 high24hEl.textContent = '$' + formatPrice(data.highPrice);
                 low24hEl.textContent = '$' + formatPrice(data.lowPrice);
                 volume24hEl.textContent = formatVolume(data.volume) + ' BTC';
@@ -3307,16 +3322,44 @@
             if (isRealMode) {
                 document.getElementById('houseEdgeDisplay').textContent = Math.round(serverHouseEdge * 100) + '% (server)';
             }
-            // Seed the chart with recent history (only if we have none yet).
-            if (msg.ticks.length && priceHistory.length === 0) {
-                priceHistory = msg.ticks.map(([t, p]) => ({ time: t, price: p }));
-                const last = msg.ticks[msg.ticks.length - 1];
-                price = last[1];
-                lastTickAt = last[0];
+            // The server's 15-minute history is authoritative for the chart.
+            seedHistory(msg.ticks.map(([t, p]) => ({ time: t, price: p })), true);
+            if (msg.game.betsPaused) showToast('Real-money betting is paused by the operator', 'warning');
+        }
+
+        // Fill the chart with recent prices so the line never starts at "now".
+        // authoritative (server): replaces everything up to its last point.
+        // otherwise (Binance backfill): only adds points older than what we have.
+        function seedHistory(points, authoritative) {
+            if (!points.length) return;
+            if (authoritative) {
+                const last = points[points.length - 1].time;
+                priceHistory = points.concat(priceHistory.filter(p => p.time > last));
+            } else {
+                const first = priceHistory.length ? priceHistory[0].time : Infinity;
+                priceHistory = points.filter(p => p.time < first).concat(priceHistory);
+            }
+            const cutoff = serverNow() - 15 * 60 * 1000;
+            let drop = 0;
+            while (drop < priceHistory.length && priceHistory[drop].time < cutoff) drop++;
+            if (drop) priceHistory.splice(0, drop);
+            if (price === null && priceHistory.length) {
+                const lastPt = priceHistory[priceHistory.length - 1];
+                price = lastPt.price;
+                lastTickAt = lastPt.time;
                 if (displayPrice === null) displayPrice = price;
                 updatePriceDisplay();
             }
-            if (msg.game.betsPaused) showToast('Real-money betting is paused by the operator', 'warning');
+        }
+
+        // Last ~16 minutes of Binance 1-second spot candles (close of each second).
+        async function backfillHistory() {
+            try {
+                const rows = await binanceGet('/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=1000');
+                seedHistory(rows.map(k => ({ time: Number(k[0]) + 1000, price: Number(k[4]) })), false);
+            } catch (e) {
+                console.warn('History backfill failed:', e.message);
+            }
         }
 
         function onServerFeed(f) {
@@ -3376,20 +3419,27 @@
                 clearTimeout(openTimer);
                 if (sock !== serverWs) return;
                 serverFeedUp = false;
-                setFeedStatus(false, 'Reconnecting...');
-                if (!directMode) startDirectFallback();
+                // Once the direct demo feed is running, keep its status label.
+                if (!directMode) {
+                    setFeedStatus(false, 'Reconnecting...');
+                    startDirectFallback();
+                }
                 setTimeout(connectServerFeed, serverRetryMs);
                 serverRetryMs = Math.min(15000, serverRetryMs * 2);
             };
         }
 
         // ---------- Direct Binance fallback (demo only, server unreachable) ----------
-        // The futures stream can accept a connection while never pushing a message
-        // when derivatives data is withheld for the client's region/IP, so watch for
-        // silence and fall back to futures REST polling.
+        // Spot, like the server (the futures stream is silent for many regions).
+        // Each stream is tried in turn; if none delivers, poll the spot REST price.
+        const DIRECT_STREAMS = [
+            'wss://stream.binance.com:9443/ws/btcusdt@aggTrade',
+            'wss://data-stream.binance.vision/ws/btcusdt@aggTrade',
+        ];
         let directMode = false;
         let directWs = null;
         let directGotData = false;
+        let directIdx = 0;
         let wsWatchdog = null;
         let restPollTimer = null;
         const WS_SILENCE_MS = 5000;
@@ -3398,9 +3448,7 @@
         async function pollRestPrice() {
             if (!directMode) return;
             try {
-                const res = await fetch('https://fapi.binance.com/fapi/v1/ticker/price?symbol=BTCUSDT');
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const data = await res.json();
+                const data = await binanceGet('/api/v3/ticker/price?symbol=BTCUSDT');
                 if (!directMode) return;
                 ingestPrice(parseFloat(data.price));
                 setFeedStatus(true, 'Demo feed (direct)');
@@ -3425,9 +3473,20 @@
             directWs = null;
         }
 
+        function directGiveUpOnStream() {
+            if (directIdx < DIRECT_STREAMS.length - 1) {
+                directIdx++;
+                setTimeout(connectBinanceDirect, 500);
+            } else if (!restPollTimer) {
+                pollRestPrice();
+                restPollTimer = setInterval(pollRestPrice, REST_POLL_MS);
+            }
+        }
+
         function connectBinanceDirect() {
             if (!directMode) return;
-            const sock = new WebSocket('wss://fstream.binance.com/ws/btcusdt@aggTrade');
+            setFeedLabel('BTC/USDT SPOT');
+            const sock = new WebSocket(DIRECT_STREAMS[directIdx]);
             directWs = sock;
             directGotData = false;
             sock.onopen = () => {
@@ -3435,10 +3494,7 @@
                 wsWatchdog = setTimeout(() => {
                     if (directGotData || sock !== directWs || !directMode) return;
                     try { sock.onclose = null; sock.close(); } catch (e) {}
-                    if (!restPollTimer) {
-                        pollRestPrice();
-                        restPollTimer = setInterval(pollRestPrice, REST_POLL_MS);
-                    }
+                    directGiveUpOnStream();
                 }, WS_SILENCE_MS);
             };
             sock.onmessage = (e) => {
@@ -3448,13 +3504,17 @@
                 if (!directGotData) {
                     directGotData = true;
                     clearTimeout(wsWatchdog);
+                    clearInterval(restPollTimer);
+                    restPollTimer = null;
                     setFeedStatus(true, 'Demo feed (direct)');
                 }
                 ingestPrice(newPrice);
             };
             sock.onclose = () => {
+                clearTimeout(wsWatchdog);
                 if (sock !== directWs || !directMode) return;
-                setTimeout(connectBinanceDirect, 3000);
+                if (directGotData) setTimeout(connectBinanceDirect, 3000);
+                else directGiveUpOnStream();   // e.g. region-blocked: try the next host
             };
         }
         
@@ -3552,6 +3612,7 @@
         initTradingUI();
         fetch24hStats();
         setInterval(fetch24hStats, 60000);
+        backfillHistory();
         connectServerFeed();
         requestAnimationFrame(animate);
         

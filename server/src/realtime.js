@@ -64,13 +64,13 @@ function attach(server) {
     ws.isAlive = true;
     ws.on('pong', () => { ws.isAlive = true; });
 
-    // Last 3 minutes of ticks thinned to 100ms, so the chart has history.
-    const since = Date.now() - 3 * 60 * 1000;
+    // The full 15-minute history (chart line + the demo's volatility model):
+    // one point per second, except the last minute at 100ms detail.
+    const fine = Date.now() - 60 * 1000;
     const history = [];
     let lastBucket = -1;
     for (const pt of feed.history) {
-      if (pt.time < since) continue;
-      const bucket = Math.floor(pt.time / 100);
+      const bucket = pt.time >= fine ? `f${Math.floor(pt.time / 100)}` : `c${Math.floor(pt.time / 1000)}`;
       if (bucket === lastBucket) history[history.length - 1] = [pt.time, pt.price];
       else history.push([pt.time, pt.price]);
       lastBucket = bucket;

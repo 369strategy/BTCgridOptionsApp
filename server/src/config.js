@@ -127,9 +127,17 @@ module.exports = {
   // derivatives data), fall back to the continuous spot stream for the life of
   // the process. Never switch back mid-session: futures and spot differ by a
   // few dollars, so a switch voids every open bet (see game.js).
+  // The two spot entries are the same market (no void between them); the last
+  // is Binance's market-data-only host, for regions where the main one is blocked.
+  // Each combines trades (aggTrade: the price we settle on) with the best
+  // bid/ask (bookTicker: many updates a second, used only as a heartbeat), so a
+  // few seconds with no trades is told apart from a real feed outage.
   FEEDS: [
-    { source: 'futures', label: 'BTC/USDT PERP', url: 'wss://fstream.binance.com/ws/btcusdt@aggTrade' },
-    { source: 'spot', label: 'BTC/USDT SPOT', url: 'wss://stream.binance.com:9443/ws/btcusdt@aggTrade' },
+    { source: 'futures', label: 'BTC/USDT PERP', url: 'wss://fstream.binance.com/stream?streams=btcusdt@aggTrade/btcusdt@bookTicker' },
+    { source: 'spot', label: 'BTC/USDT SPOT', url: 'wss://stream.binance.com:9443/stream?streams=btcusdt@aggTrade/btcusdt@bookTicker' },
+    { source: 'spot', label: 'BTC/USDT SPOT', url: 'wss://data-stream.binance.vision/stream?streams=btcusdt@aggTrade/btcusdt@bookTicker' },
   ],
   FEED_SILENCE_MS: 5000,
+  // 1-second spot candles for the startup history backfill (tried in order).
+  KLINE_HOSTS: ['https://api.binance.com', 'https://data-api.binance.vision'],
 };
