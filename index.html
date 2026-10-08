@@ -440,6 +440,9 @@
         .legend-swatch.bet { width: 9px; height: 9px; border: 1px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.1); }
         .legend-swatch.win { width: 9px; height: 9px; border: 1px solid var(--green); background: var(--green-bg); }
         .legend-swatch.loss { width: 9px; height: 9px; border: 1px solid var(--red); background: var(--red-bg); }
+        .mult-scale { gap: 3px; }
+        .mult-scale span { font-family: var(--mono); font-size: 10px; }
+        .mult-scale i { display: inline-block; width: 10px; height: 6px; border-radius: 2px; opacity: 0.85; }
         #chart { flex: 1; width: 100%; min-height: 0; display: block; cursor: default; }
 
         .footer {
@@ -975,6 +978,11 @@
                         <div class="legend-item"><span class="legend-swatch bet"></span>Your bet</div>
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
                         <div class="legend-item"><span class="legend-swatch loss"></span>Loss</div>
+                        <div class="legend-item mult-scale" title="Multiplier colours: &lt;2x, 2–5x, 5–10x, 10–25x, 25–50x, 50x+">
+                            <span>1x</span>
+                            <i style="background: rgb(134, 190, 160)"></i><i style="background: rgb(128, 172, 196)"></i><i style="background: rgb(160, 152, 206)"></i><i style="background: rgb(206, 186, 140)"></i><i style="background: rgb(206, 152, 128)"></i><i style="background: rgb(200, 132, 156)"></i>
+                            <span>100x</span>
+                        </div>
                     </div>
                 </div>
                 <canvas id="chart"></canvas>
@@ -2348,6 +2356,21 @@
         const CHART_MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
         const CHART_SANS = 'Inter, -apple-system, "Segoe UI", sans-serif';
 
+        // Washed-out palette for unplaced multipliers, by payout size:
+        // sage → slate blue → lavender → sand → clay → dusty rose.
+        const MULT_TONES = [
+            [2,        [134, 190, 160]],  // sage        < 2x
+            [5,        [128, 172, 196]],  // slate blue  2–5x
+            [10,       [160, 152, 206]],  // lavender    5–10x
+            [25,       [206, 186, 140]],  // sand        10–25x
+            [50,       [206, 152, 128]],  // clay        25–50x
+            [Infinity, [200, 132, 156]],  // dusty rose  50x+
+        ];
+        function multTone(mult) {
+            for (const [max, rgb] of MULT_TONES) if (mult < max) return rgb;
+            return MULT_TONES[MULT_TONES.length - 1][1];
+        }
+
         function roundRectPath(x, y, w, h, r) {
             ctx.beginPath();
             if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
@@ -2598,6 +2621,15 @@
                 const cellW = cx1 - cx0;
                 const cellH = cy1 - cy0;
 
+                const [tr, tg, tb] = multTone(mult);
+
+                // Faint tint of the cell's tone (grey once the column is closing)
+                if (cellW > 0 && cellH > 0 && !isClosingSoon && !highlighted) {
+                    roundRectPath(cx0 + 2, cy0 + 2, cellW - 4, cellH - 4, 4);
+                    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${0.02 + baseOpacity * 0.05})`;
+                    ctx.fill();
+                }
+
                 if (cellW > 0 && cellH > 0 && !isClosingSoon && highlighted) {
                     roundRectPath(cx0 + 2, cy0 + 2, cellW - 4, cellH - 4, 4);
                     if (isDragSelected) {
@@ -2611,9 +2643,9 @@
                         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
                         ctx.setLineDash([3, 3]);
                     } else {
-                        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+                        ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, 0.14)`;
                         ctx.fill();
-                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                        ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, 0.7)`;
                     }
                     ctx.lineWidth = 1;
                     ctx.stroke();
@@ -2623,8 +2655,6 @@
                 if (cellCenterX < padding.left || cellCenterX > right ||
                     cellCenterY < padding.top || cellCenterY > bottom) continue;
 
-                // Likelier cells read brighter; long shots recede.
-                const weight = mult < 2 ? 1 : mult < 10 ? 0.88 : mult < 50 ? 0.74 : 0.6;
 
                 if (isClosingSoon) {
                     ctx.font = `500 11px ${CHART_MONO}`;
@@ -2642,7 +2672,7 @@
                     ctx.fillText('$' + betSize.toFixed(2), cellCenterX, cellCenterY + 8);
                 } else {
                     ctx.font = isHovered ? `600 13px ${CHART_MONO}` : `500 11px ${CHART_MONO}`;
-                    ctx.fillStyle = `rgba(237, 237, 239, ${Math.min(1, isHovered ? 1 : baseOpacity * weight)})`;
+                    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${Math.min(1, isHovered ? 1 : baseOpacity + 0.08)})`;
                     const yOff = isHovered && prob >= 0.005 ? -6 : 0;
                     ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY + yOff);
                     if (isHovered && prob >= 0.005) {
