@@ -1065,9 +1065,9 @@
                         <div class="legend-item"><span class="legend-swatch bet"></span>Your bet</div>
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
                         <div class="legend-item"><span class="legend-swatch loss"></span>Loss</div>
-                        <div class="legend-item mult-scale" title="Multiplier colours: &lt;2x, 2–5x, 5–10x, 10–25x, 25–50x, 50x+">
+                        <div class="legend-item mult-scale" title="Multiplier colours: &lt;2x, 2–5x, 5–10x, 10–25x, 25–50x, 50–100x, 100x">
                             <span>1x</span>
-                            <i style="background: rgb(92, 200, 140)"></i><i style="background: rgb(84, 168, 224)"></i><i style="background: rgb(150, 128, 236)"></i><i style="background: rgb(230, 188, 92)"></i><i style="background: rgb(234, 134, 92)"></i><i style="background: rgb(230, 100, 142)"></i>
+                            <i style="background: rgb(98, 188, 146)"></i><i style="background: rgb(150, 190, 116)"></i><i style="background: rgb(198, 190, 106)"></i><i style="background: rgb(204, 162, 92)"></i><i style="background: rgb(200, 124, 98)"></i><i style="background: rgb(194, 102, 112)"></i><i style="background: rgb(186, 92, 132)"></i>
                             <span>100x</span>
                         </div>
                     </div>
@@ -2443,15 +2443,17 @@
         const CHART_MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
         const CHART_SANS = 'Inter, -apple-system, "Segoe UI", sans-serif';
 
-        // Muted (not neon) palette for unplaced multipliers, by payout size:
-        // sage → slate blue → lavender → sand → clay → dusty rose.
+        // Multiplier colours: the original app's palette and tiers (green →
+        // lime → yellow → orange → red-orange → red → magenta), toned down to
+        // sit quietly on the black background.
         const MULT_TONES = [
-            [2,        [92, 200, 140]],  // sage        < 2x
-            [5,        [84, 168, 224]],  // slate blue  2–5x
-            [10,       [150, 128, 236]],  // lavender    5–10x
-            [25,       [230, 188, 92]],  // sand        10–25x
-            [50,       [234, 134, 92]],  // clay        25–50x
-            [Infinity, [230, 100, 142]],  // dusty rose  50x+
+            [2,        [98, 188, 146]],   // green       < 2x
+            [5,        [150, 190, 116]],  // lime        2–5x
+            [10,       [198, 190, 106]],  // yellow      5–10x
+            [25,       [204, 162, 92]],   // orange      10–25x
+            [50,       [200, 124, 98]],   // red-orange  25–50x
+            [100,      [194, 102, 112]],  // red         50–100x
+            [Infinity, [186, 92, 132]],   // magenta     100x
         ];
         function multTone(mult) {
             for (const [max, rgb] of MULT_TONES) if (mult < max) return rgb;
@@ -2713,7 +2715,7 @@
                 // Faint tint of the cell's tone (grey once the column is closing)
                 if (cellW > 0 && cellH > 0 && !isClosingSoon && !highlighted) {
                     roundRectPath(cx0 + 2, cy0 + 2, cellW - 4, cellH - 4, 4);
-                    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${0.03 + baseOpacity * 0.075})`;
+                    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${0.025 + baseOpacity * 0.06})`;
                     ctx.fill();
                 }
 
@@ -2730,7 +2732,7 @@
                         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
                         ctx.setLineDash([3, 3]);
                     } else {
-                        ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, 0.18)`;
+                        ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, 0.16)`;
                         ctx.fill();
                         ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, 0.7)`;
                     }
@@ -2759,7 +2761,7 @@
                     ctx.fillText('$' + betSize.toFixed(2), cellCenterX, cellCenterY + 8);
                 } else {
                     ctx.font = isHovered ? `600 13px ${CHART_MONO}` : `500 11px ${CHART_MONO}`;
-                    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${Math.min(1, isHovered ? 1 : baseOpacity + 0.14)})`;
+                    ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${Math.min(1, isHovered ? 1 : baseOpacity + 0.1)})`;
                     const yOff = isHovered && prob >= 0.005 ? -6 : 0;
                     ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY + yOff);
                     if (isHovered && prob >= 0.005) {
