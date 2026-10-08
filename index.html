@@ -356,7 +356,58 @@
             padding: 12px 18px;
             min-height: 68px;
         }
-        .asset { display: flex; align-items: center; gap: 10px; flex: none; }
+        /* Market switcher (BTC live; others coming soon) */
+        .asset-switcher { position: relative; flex: none; }
+        .asset {
+            display: flex; align-items: center; gap: 10px;
+            padding: 5px 10px 5px 5px; margin: -5px 0 -5px -5px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            text-align: left;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .asset:hover, .asset[aria-expanded="true"] { background: var(--surface-2); border-color: var(--border); }
+        .asset-chevron { color: var(--text-3); margin-left: 4px; transition: transform 0.2s; }
+        .asset[aria-expanded="true"] .asset-chevron { transform: rotate(180deg); }
+        .asset-menu {
+            position: absolute; top: calc(100% + 10px); left: -5px;
+            z-index: 500;
+            width: 260px;
+            padding: 6px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-2);
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+            display: none;
+        }
+        .asset-menu.show { display: block; animation: fadeIn 0.15s ease; }
+        .asset-menu-label {
+            padding: 6px 8px 8px;
+            font-size: 10px; color: var(--text-4);
+            text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .asset-option {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .asset-option.active { background: var(--surface-3); }
+        .asset-option.soon { opacity: 0.4; cursor: not-allowed; user-select: none; }
+        .asset-option-icon {
+            width: 22px; height: 22px; flex: none;
+            display: grid; place-items: center;
+            border-radius: 50%;
+            background: var(--surface-4);
+            font-size: 11px; font-weight: 700;
+            object-fit: cover;
+        }
+        .asset-option.soon .asset-option-icon { filter: grayscale(1); }
+        .asset-option-name { font-weight: 600; }
+        .asset-option-pair { color: var(--text-3); font-size: 12px; margin-left: -6px; }
+        .asset-option-check { margin-left: auto; color: var(--text); }
+        .asset-option .soon-badge { margin-left: auto; }
         .asset-icon {
             width: 34px; height: 34px;
             display: grid; place-items: center;
@@ -913,11 +964,47 @@
         <!-- ================= MAIN: price + chart ================= -->
         <main class="main">
             <header class="topbar">
-                <div class="asset">
-                    <div class="asset-icon">₿</div>
-                    <div class="asset-text">
-                        <h1 id="feedLabel">BTC/USDT</h1>
-                        <span class="asset-sub">15s TWAP · 10s × $10 grid</span>
+                <div class="asset-switcher">
+                    <button class="asset" id="assetBtn" onclick="toggleAssetMenu(event)" aria-haspopup="listbox" aria-expanded="false" title="Change market">
+                        <div class="asset-icon">₿</div>
+                        <div class="asset-text">
+                            <h1 id="feedLabel">BTC/USDT</h1>
+                            <span class="asset-sub">15s TWAP · 10s × $10 grid</span>
+                        </div>
+                        <svg class="asset-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="asset-menu" id="assetMenu" role="listbox" aria-label="Markets">
+                        <div class="asset-menu-label">Markets</div>
+                        <div class="asset-option active" role="option" aria-selected="true">
+                            <span class="asset-option-icon">₿</span>
+                            <span class="asset-option-name">BTC</span>
+                            <span class="asset-option-pair">/USDT</span>
+                            <svg class="asset-option-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                        </div>
+                        <div class="asset-option soon" role="option" aria-disabled="true">
+                            <img class="asset-option-icon" src="assets/logos/solana.svg" alt="" width="22" height="22">
+                            <span class="asset-option-name">SOL</span>
+                            <span class="asset-option-pair">/USDT</span>
+                            <span class="soon-badge">Coming soon</span>
+                        </div>
+                        <div class="asset-option soon" role="option" aria-disabled="true">
+                            <span class="asset-option-icon">P</span>
+                            <span class="asset-option-name">PUMP</span>
+                            <span class="asset-option-pair">/USDT</span>
+                            <span class="soon-badge">Coming soon</span>
+                        </div>
+                        <div class="asset-option soon" role="option" aria-disabled="true">
+                            <img class="asset-option-icon" src="assets/logos/hyperliquid.png" alt="" width="22" height="22">
+                            <span class="asset-option-name">HYPE</span>
+                            <span class="asset-option-pair">/USDT</span>
+                            <span class="soon-badge">Coming soon</span>
+                        </div>
+                        <div class="asset-option soon" role="option" aria-disabled="true">
+                            <img class="asset-option-icon" src="assets/logos/ethereum.svg" alt="" width="22" height="22">
+                            <span class="asset-option-name">ETH</span>
+                            <span class="asset-option-pair">/USDT</span>
+                            <span class="soon-badge">Coming soon</span>
+                        </div>
                     </div>
                 </div>
 
@@ -4291,6 +4378,23 @@
         document.getElementById('depositModal').addEventListener('click', function(e) {
             if (e.target === this) closeDepositModal();
         });
+
+        // Market switcher: only BTC is live; the other markets are listed as
+        // coming soon and have no click action.
+        function toggleAssetMenu(e) {
+            if (e) e.stopPropagation();
+            const menu = document.getElementById('assetMenu');
+            const open = menu.classList.toggle('show');
+            document.getElementById('assetBtn').setAttribute('aria-expanded', String(open));
+        }
+        function closeAssetMenu() {
+            document.getElementById('assetMenu').classList.remove('show');
+            document.getElementById('assetBtn').setAttribute('aria-expanded', 'false');
+        }
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.asset-switcher')) closeAssetMenu();
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAssetMenu(); });
 
         tryEagerConnect();
     </script>
