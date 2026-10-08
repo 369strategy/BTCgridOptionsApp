@@ -1276,6 +1276,7 @@
         let twapPrice = null;
         let twapFromServer = false;
         let lastShownGamePrice = null;
+        let lastFlashPrice = null;
         function gamePrice() { return twapPrice !== null ? twapPrice : price; }
 
         const localTwap = {
@@ -1357,13 +1358,13 @@
         let priceVelocity = 0;
         const priceSmoothingFactor = 0.2; // Higher = faster response
 
-        // Line tip: springs toward each new TWAP value with a slight overshoot,
-        // so the line glides and settles instead of stepping. Display only —
-        // results always use the exact published TWAP.
+        // The line tip is the continuous TWAP (see continuousTwap) — it moves
+        // smoothly by itself, so no spring is needed and what you see is
+        // exactly what is settled.
         let twapHead = null;
-        let twapHeadVel = 0;
-        const TWAP_HEAD_STIFFNESS = 0.09;
-        const TWAP_HEAD_DAMPING = 0.75;  // ~15% overshoot, settles in ~0.6s
+        // Ticks reach the browser in ~100ms batches; drawing slightly behind
+        // "now" means the line never has to be redrawn when a late tick lands.
+        const TWAP_DISPLAY_LAG_MS = 150;
         
         // Trading state - these are the ACTIVE values (sync'd from mode-specific vars)
         let balance = 10000;
@@ -2299,10 +2300,12 @@
             const lastCellEnd = currentCellStart + 13 * msPerCell;
             const maxSteps = Math.ceil((lastCellEnd - lastEnd) / 1000);
             const colAt = new Int16Array(maxSteps + 1).fill(-1);
+            // step k = TWAP segment from second T(k-1) to T(k), in the column of its start
             for (let k = 1; k <= maxSteps; k++) {
-                const T = lastEnd + k * 1000;
+                const T = lastEnd + (k - 1) * 1000;
                 if (T >= firstCell && T < lastCellEnd) colAt[k] = Math.floor((T - firstCell) / msPerCell);
             }
+            const startTw = continuousTwap(now) ?? twapNow;
 
             const base = new Float64Array(W);
             let baseSum = 0;
@@ -2317,6 +2320,7 @@
                 vals.set(base);
                 let sum = baseSum;
                 let S = S0;
+                let prevTw = startTw;
                 for (let k = 1; k <= maxSteps; k++) {
                     const prev = S;
                     let jump = 0;
@@ -2325,12 +2329,17 @@
                     const v = k === 1 ? (part.knownSum + ((prev + S) / 2) * remainMs) / 1000 : (prev + S) / 2;
                     vals[W + k - 1] = v;
                     sum += v - vals[k - 1];
+                    const tw = sum / W;
                     const col = colAt[k];
-                    if (col < 0) continue;
-                    const level = Math.floor((sum / W) / pricePerCell) * pricePerCell;
-                    if (level < minLevel || level > maxLevel) continue;
-                    const idx = col * nLevels + (level - minLevel) / pricePerCell;
-                    if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
+                    if (col >= 0) {
+                        const a = Math.max(minLevel, Math.floor(Math.min(prevTw, tw) / pricePerCell) * pricePerCell);
+                        const b = Math.min(maxLevel, Math.floor(Math.max(prevTw, tw) / pricePerCell) * pricePerCell);
+                        for (let level = a; level <= b; level += pricePerCell) {
+                            const idx = col * nLevels + (level - minLevel) / pricePerCell;
+                            if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
+                        }
+                    }
+                    prevTw = tw;
                 }
             }
 
@@ -2396,14 +2405,19 @@
             const gp = gamePrice();
             if (!gp) return;
             if (price) document.getElementById('livePrice').textContent = 'Live $' + formatPrice(price);
-            if (gp === lastShownGamePrice) return; // the TWAP moves once a second
-            currentPriceEl.textContent = '$' + formatPrice(gp);
+            // The TWAP is continuous: repaint only when the cents change, and
+            // flash green/red only on moves of $1+ (not on every tiny step).
+            const cents = Math.round(gp * 100) / 100;
+            if (cents === lastShownGamePrice) return;
+            currentPriceEl.textContent = '$' + formatPrice(cents);
 
-            if (lastShownGamePrice !== null) {
-                currentPriceEl.className = 'price-value ' + (gp > lastShownGamePrice ? 'up' : 'down');
-                setTimeout(() => currentPriceEl.className = 'price-value', 150);
+            if (lastFlashPrice === null) lastFlashPrice = cents;
+            if (Math.abs(cents - lastFlashPrice) >= 1) {
+                currentPriceEl.className = 'price-value ' + (cents > lastFlashPrice ? 'up' : 'down');
+                setTimeout(() => currentPriceEl.className = 'price-value', 250);
+                lastFlashPrice = cents;
             }
-            lastShownGamePrice = gp;
+            lastShownGamePrice = cents;
 
             if (startPrice) {
                 const change = ((gp - startPrice) / startPrice) * 100;
@@ -2608,24 +2622,18 @@
                 ctx.stroke();
             }
 
-            // The game price: the TWAP (one point per second), drawn as a smooth
-            // spline that ends at the springy tip at NOW.
-            const headPrice = twapHead !== null ? twapHead : (twapPrice !== null ? twapPrice : price);
+            // The game price: the continuous 5s TWAP, sampled every 100ms up to
+            // the tip (exactly the line that settles bets).
+            const lineEnd = now - TWAP_DISPLAY_LAG_MS;
+            const headPrice = continuousTwap(lineEnd) ?? (twapPrice !== null ? twapPrice : price);
             const headY = headPrice ? Math.max(padding.top, Math.min(bottom, priceToY(headPrice))) : centerY;
-            const recentHistory = twapHistory.filter(d => d.time >= timeStart - 2000 && d.time < now - 250);
-            if (recentHistory.length && headPrice) recentHistory.push({ time: now, price: headPrice });
-            const linePts = recentHistory.map(pt => [timeToX(pt.time), priceToY(pt.price)]);
-            // Catmull-Rom spline through every point, as cubic Beziers
-            const tracePath = (pts) => {
-                ctx.moveTo(pts[0][0], pts[0][1]);
-                for (let i = 0; i < pts.length - 1; i++) {
-                    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-                    ctx.bezierCurveTo(
-                        p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
-                        p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
-                        p2[0], p2[1]);
-                }
-            };
+            const headX = timeToX(lineEnd);
+            const linePts = [];
+            for (let t = Math.ceil((timeStart - 1000) / 100) * 100; t < lineEnd; t += 100) {
+                const v = continuousTwap(t);
+                if (v !== null) linePts.push([timeToX(t), priceToY(v)]);
+            }
+            if (headPrice) linePts.push([headX, priceToY(headPrice)]);
             if (linePts.length > 1) {
                 ctx.save();
                 ctx.beginPath();
@@ -2636,9 +2644,9 @@
                 grad.addColorStop(0, 'rgba(255, 255, 255, 0.07)');
                 grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 ctx.beginPath();
-                tracePath(linePts);
+                ctx.moveTo(linePts[0][0], bottom);
+                for (const [x, y] of linePts) ctx.lineTo(x, y);
                 ctx.lineTo(linePts[linePts.length - 1][0], bottom);
-                ctx.lineTo(linePts[0][0], bottom);
                 ctx.closePath();
                 ctx.fillStyle = grad;
                 ctx.fill();
@@ -2650,7 +2658,7 @@
                 ctx.lineJoin = 'round';
                 ctx.shadowColor = 'rgba(255, 255, 255, 0.35)';
                 ctx.shadowBlur = 10;
-                tracePath(linePts);
+                linePts.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
                 ctx.stroke();
                 ctx.restore();
             }
@@ -2659,11 +2667,11 @@
             if (price) {
                 const pulse = (Math.sin(serverNow() / 450) + 1) / 2;
                 ctx.beginPath();
-                ctx.arc(nowX, headY, 9 + pulse * 5, 0, Math.PI * 2);
+                ctx.arc(headX, headY, 9 + pulse * 5, 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(255, 255, 255, ${0.06 + pulse * 0.05})`;
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(nowX, headY, 5, 0, Math.PI * 2);
+                ctx.arc(headX, headY, 5, 0, Math.PI * 2);
                 ctx.fillStyle = '#fafafa';
                 ctx.fill();
             }
@@ -2983,16 +2991,7 @@
                     }
                 }
                 
-                // Line tip spring (bouncy glide to the latest TWAP)
-                if (target !== null) {
-                    if (twapHead === null || Math.abs(target - twapHead) > 30) {
-                        twapHead = target;
-                        twapHeadVel = 0;
-                    } else {
-                        twapHeadVel = (twapHeadVel + (target - twapHead) * TWAP_HEAD_STIFFNESS) * TWAP_HEAD_DAMPING;
-                        twapHead += twapHeadVel;
-                    }
-                }
+                if (target !== null) twapHead = target;
 
                 // Update pattern cells every 500ms (not every frame)
                 if (currentTime - lastPatternUpdate > 500) {
@@ -3190,7 +3189,8 @@
             }
         }
 
-        // A published 5s TWAP point: the game's price moves, demo bets settle.
+        // A whole-second TWAP point (history). The live price, the line and demo
+        // settlement come from the continuous TWAP in liveTwapTick().
         function onTwapPoint(t, v) {
             if (twapHistory.length && t <= twapHistory[twapHistory.length - 1].time) return;
             twapHistory.push({ time: t, price: v });
@@ -3198,8 +3198,42 @@
             let drop = 0;
             while (drop < twapHistory.length && twapHistory[drop].time < cutoff) drop++;
             if (drop) twapHistory.splice(0, drop);
+        }
+
+        // Continuous 5s TWAP at time t from the trade history: time-weighted
+        // average of the price over [t - 5s, t] (price held between trades).
+        // Same definition the server settles on.
+        function continuousTwap(t) {
+            const ph = priceHistory;
+            if (!ph.length) return null;
+            const Wms = TWAP_WINDOW_S * 1000;
+            const a = t - Wms;
+            let lo = 0, hi = ph.length - 1, idx = -1;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (ph[mid].time <= a) { idx = mid; lo = mid + 1; } else hi = mid - 1;
+            }
+            let p = idx >= 0 ? ph[idx].price : ph[0].price;
+            let cursor = a, sum = 0;
+            for (let i = idx + 1; i < ph.length && ph[i].time <= t; i++) {
+                if (ph[i].time > cursor) { sum += p * (ph[i].time - cursor); cursor = ph[i].time; }
+                p = ph[i].price;
+            }
+            sum += p * (t - cursor);
+            return sum / Wms;
+        }
+
+        // Every 50ms: move the game price along the continuous TWAP and settle
+        // demo bets on the segment since the last step (the line entering a cell
+        // at any moment counts). Real bets are settled by the server the same way.
+        let liveTwapPrev = null;
+        function liveTwapTick() {
+            const t = serverNow() - TWAP_DISPLAY_LAG_MS;
+            const v = continuousTwap(t);
+            if (v === null) return;
             twapPrice = v;
-            checkLockedBoxTouches(v, t);
+            if (liveTwapPrev && t > liveTwapPrev[0]) checkLockedBoxTouches(liveTwapPrev[0], liveTwapPrev[1], t, v);
+            liveTwapPrev = [t, v];
             updatePriceDisplay();
         }
         // Local TWAP points only drive the game when the server is unreachable.
@@ -3362,27 +3396,29 @@
             };
         }
         
-        // Check if current price touches any locked boxes
-        function checkLockedBoxTouches(currentPrice, currentTime) {
+        // Demo settlement on one segment of the continuous TWAP (t0,v0)→(t1,v1):
+        // a box wins if the line enters its cell anywhere inside its column.
+        function checkLockedBoxTouches(t0, v0, t1, v1) {
             const pricePerCell = 10; // $10 per cell
             const msPerCell = 10000; // 10 seconds per cell
-            
+            const at = (x) => v0 + (v1 - v0) * (x - t0) / (t1 - t0);
+
             for (const key in lockedBoxes) {
                 const box = lockedBoxes[key];
-                
+
                 // Skip already touched or expired boxes
                 if (box.touched || box.expired) continue;
                 // Real bets are settled by the server, never here.
                 if (box.isRealBet) continue;
-                
-                // Check if we're within this box's time window
-                const boxStart = box.cellTs;
-                const boxEnd = boxStart + msPerCell;
-                
-                if (currentTime >= boxStart && currentTime < boxEnd) {
-                    // Check if price falls within this box's $10 price range
+
+                // Part of the segment inside this box's time window
+                const s = Math.max(t0, box.cellTs);
+                const e = Math.min(t1, box.cellTs + msPerCell - 1);
+
+                if (s <= e) {
+                    const segLo = Math.min(at(s), at(e)), segHi = Math.max(at(s), at(e));
                     // Box covers: [priceLevel, priceLevel + pricePerCell)
-                    if (currentPrice >= box.priceLevel && currentPrice < box.priceLevel + pricePerCell) {
+                    if (segHi >= box.priceLevel && segLo < box.priceLevel + pricePerCell) {
                         box.touched = true;
                         box.touchedAt = serverNow(); // Record when touched for animation
                         
@@ -3406,7 +3442,7 @@
         function updateLockedBoxExpiry() {
             const now = serverNow();
             const msPerCell = 10000; // 10 seconds per cell
-            const expiryBuffer = 200; // 200ms grace period
+            const expiryBuffer = 500; // grace: the line is drawn/settled 150ms behind now
             
             for (const key in lockedBoxes) {
                 const box = lockedBoxes[key];
@@ -3459,6 +3495,7 @@
         backfillHistory();
         connectServerFeed();
         setInterval(() => localTwap.closeUntil(serverNow()), 100);
+        setInterval(liveTwapTick, 50);
         requestAnimationFrame(animate);
         
         // Run simulation check every 300ms (simulation itself runs every 1s)

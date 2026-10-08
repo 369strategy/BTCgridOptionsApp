@@ -266,18 +266,38 @@ async function settle(snap, outcome, evidence = {}) {
   }
 }
 
-// Settlement runs on the published 5s TWAP points (twap.js), one per second:
-// a bet wins if a point stamped inside its column lands in its $10 band.
-function onTwap(t, p) {
+// Settlement runs on the CONTINUOUS 5s TWAP (twap.js). Evaluations arrive at
+// every breakpoint, and the TWAP is linear between them, so each consecutive
+// pair is an exact segment of the line: a bet wins if any part of a segment
+// inside its column lies in its $10 band — i.e. if the line on screen enters
+// the cell at any moment. Evidence is the exact entry point.
+let prevEval = null; // [t, v]
+
+function onEval(t, v) {
+  const prev = prevEval;
+  prevEval = [t, v];
+  if (!prev || v === null || prev[1] === null || t <= prev[0]) return;
+  const [t0, v0] = prev;
+  const at = (x) => v0 + (v - v0) * (x - t0) / (t - t0);
   for (const snap of open.values()) {
     if (snap.settling || snap.pending) continue;
-    const end = snap.cellTs + GAME.MS_PER_CELL;
-    if (t < snap.cellTs || t >= end) continue;
-    snap.hi = snap.hi === null ? p : Math.max(snap.hi, p);
-    snap.lo = snap.lo === null ? p : Math.min(snap.lo, p);
-    if (p >= snap.level && p < snap.level + GAME.PRICE_PER_CELL) {
-      settle(snap, 'won', { touchPrice: p, touchAt: t });
-    }
+    const a = snap.cellTs;
+    const b = snap.cellTs + GAME.MS_PER_CELL;
+    const s = Math.max(t0, a);
+    const e = Math.min(t, b - 1);
+    if (s > e) continue;
+    const vs = at(s), ve = at(e);
+    const segLo = Math.min(vs, ve), segHi = Math.max(vs, ve);
+    snap.hi = snap.hi === null ? segHi : Math.max(snap.hi, segHi);
+    snap.lo = snap.lo === null ? segLo : Math.min(snap.lo, segLo);
+    const L = snap.level, H = snap.level + GAME.PRICE_PER_CELL;
+    if (segHi < L || segLo >= H) continue;
+    // entry point into [L, H)
+    let touchPrice, touchAt;
+    if (vs >= L && vs < H) { touchPrice = vs; touchAt = s; }
+    else if (vs < L) { touchPrice = L; touchAt = s + (e - s) * (L - vs) / (ve - vs); }
+    else { touchPrice = H - 1e-6; touchAt = s + (e - s) * (vs - touchPrice) / (vs - ve); }
+    settle(snap, 'won', { touchPrice, touchAt: Math.round(touchAt) });
   }
 }
 
@@ -313,7 +333,7 @@ function onSource({ source }) {
 async function start() {
   await loadFlags();
   await loadOpenBets();
-  twap.on('twap', onTwap);
+  twap.on('eval', onEval);
   feed.on('source', onSource);
   setInterval(sweep, 250);
 }

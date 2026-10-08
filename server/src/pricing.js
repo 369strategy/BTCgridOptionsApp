@@ -114,13 +114,13 @@ const cellKey = (cellTs, level) => `${cellTs}_${level}`;
  *
  * Each path simulates the live price second by second (same volatility and
  * jump model as before), turns each second into a bucket the way twap.js does,
- * and rolls the 60-bucket average forward — starting from the buckets that
- * have ALREADY happened. That known part is why near columns are nearly
- * decided; pricing it in exactly is what keeps the odds fair.
+ * and rolls the 5-bucket average forward — starting from the buckets that
+ * have ALREADY happened, so the known part of the window is priced exactly.
  *
- * A TWAP point is published at every second boundary T (mean of buckets
- * covering [T-5s, T)); a cell is touched if a point with T inside its column
- * lands in its $10 band — the same rule game.js settles with.
+ * The TWAP is continuous (game.js settles if the line enters a cell at ANY
+ * moment), so a cell counts as touched if the path's TWAP crosses its row
+ * anywhere between two consecutive seconds of the column — not only if a
+ * whole-second value lands in it.
  */
 function simulate() {
   const now = Date.now();
@@ -149,9 +149,11 @@ function simulate() {
   const firstCell = currentCellStart + mpc;
   const lastCellEnd = currentCellStart + (HORIZON_CELLS + 1) * mpc;
   const maxSteps = Math.ceil((lastCellEnd - lastEnd) / 1000);
+  // Step k is the TWAP segment from second T(k-1) to T(k); it belongs to the
+  // column containing its start.
   const colAt = new Int16Array(maxSteps + 1).fill(-1);
   for (let k = 1; k <= maxSteps; k++) {
-    const T = lastEnd + k * 1000;
+    const T = lastEnd + (k - 1) * 1000;
     if (T >= firstCell && T < lastCellEnd) colAt[k] = Math.floor((T - firstCell) / mpc);
   }
 
@@ -164,6 +166,7 @@ function simulate() {
   }
   const vals = new Float64Array(W + maxSteps);
   const remainMs = Math.max(0, 1000 - part.knownMs);
+  const startTw = twap.at(now) ?? baseSum / W;
 
   const hits = new Uint32Array(HORIZON_CELLS * nLevels);
   const touched = new Uint8Array(HORIZON_CELLS * nLevels);
@@ -173,6 +176,7 @@ function simulate() {
     vals.set(base);
     let sum = baseSum;
     let S = S0;
+    let prevTw = startTw;
     for (let k = 1; k <= maxSteps; k++) {
       const prev = S;
       let jump = 0;
@@ -184,12 +188,18 @@ function simulate() {
         : (prev + S) / 2;
       vals[W + k - 1] = v;
       sum += v - vals[k - 1];
+      const tw = sum / W;
       const col = colAt[k];
-      if (col < 0) continue;
-      const level = Math.floor((sum / W) / ppc) * ppc;
-      if (level < minLevel || level > maxLevel) continue;
-      const idx = col * nLevels + (level - minLevel) / ppc;
-      if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
+      if (col >= 0) {
+        // every row the segment prevTw -> tw passes through
+        const a = Math.max(minLevel, Math.floor(Math.min(prevTw, tw) / ppc) * ppc);
+        const b = Math.min(maxLevel, Math.floor(Math.max(prevTw, tw) / ppc) * ppc);
+        for (let level = a; level <= b; level += ppc) {
+          const idx = col * nLevels + (level - minLevel) / ppc;
+          if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
+        }
+      }
+      prevTw = tw;
     }
   }
 
