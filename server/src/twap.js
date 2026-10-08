@@ -1,9 +1,9 @@
-// 15-second TWAP of the Binance trade feed — THE price of the game.
+// 5-second TWAP of the Binance trade feed — THE price of the game.
 //
 // Every second is one bucket: the time-weighted average of the trade price
 // during that second (the price is held between trades), so a one-millisecond
 // spike counts for 1/1000 of its second. The TWAP published at second boundary
-// T is the mean of the 15 buckets covering [T - 15s, T). Odds, settlement and
+// T is the mean of the 5 buckets covering [T - 5s, T). Odds, settlement and
 // the chart line all use exactly these published values.
 const EventEmitter = require('events');
 const config = require('./config');

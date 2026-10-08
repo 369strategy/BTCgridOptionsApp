@@ -3,7 +3,7 @@
 //   hello   on connect: server clock, grid geometry, feed source, recent ticks
 //   ticks   every 100ms: all Binance ticks since the last batch [[t, p], ...]
 //           (the faint live line; the game itself runs on the TWAP)
-//   twap    every second: the published 15s TWAP point — the game's price
+//   twap    every second: the published 5s TWAP point — the game's price
 //   grid    every 1s: current server multipliers per cell
 //   feed    when the source changes (futures -> spot)
 //   account / bet   per signed-in wallet (after {type:'auth', token})

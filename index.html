@@ -969,7 +969,7 @@
                         <div class="asset-icon">₿</div>
                         <div class="asset-text">
                             <h1 id="feedLabel">BTC/USDT</h1>
-                            <span class="asset-sub">15s TWAP · 10s × $10 grid</span>
+                            <span class="asset-sub">5s TWAP · 10s × $10 grid</span>
                         </div>
                         <svg class="asset-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
@@ -1009,14 +1009,14 @@
                 </div>
 
                 <div class="price-section">
-                    <div class="price-label">BTC Price · 15s TWAP</div>
+                    <div class="price-label">BTC Price · 5s TWAP</div>
                     <div class="price-line">
                         <div class="price-value" id="currentPrice">$--,---.--</div>
                         <span class="change-badge positive" id="priceChange">+0.00%</span>
                     </div>
                     <div class="price-sub">
                         <span id="priceChangeAbs">$0.00</span>
-                        <span id="livePrice" title="Latest Binance trade. Bets are decided on the 15-second TWAP, not on single trades."></span>
+                        <span id="livePrice" title="Latest Binance trade. Bets are decided on the 5-second TWAP, not on single trades."></span>
                     </div>
                 </div>
 
@@ -1058,9 +1058,9 @@
 
             <div class="chart-container">
                 <div class="chart-header">
-                    <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> · 15s TWAP · 10 sec × $10</h2>
+                    <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> · 5s TWAP · 10 sec × $10</h2>
                     <div class="chart-legend">
-                        <div class="legend-item"><span class="legend-swatch line"></span>15s TWAP</div>
+                        <div class="legend-item"><span class="legend-swatch line"></span>5s TWAP</div>
                         <div class="legend-item"><span class="legend-swatch live"></span>Live trades</div>
                         <div class="legend-item"><span class="legend-swatch bet"></span>Your bet</div>
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
@@ -1265,13 +1265,13 @@
         let startPrice = null;
         let priceHistory = [];          // live Binance trades (faint line + volatility)
 
-        // ---------- 15-second TWAP: the game's price ----------
+        // ---------- 5-second TWAP: the game's price ----------
         // Each second is one bucket: the time-weighted average of the trade price
         // in that second. The TWAP published at second boundary T is the mean of
-        // the 15 buckets covering [T-15s, T). The server publishes the official
+        // the 5 buckets covering [T-5s, T). The server publishes the official
         // points; this local copy (same algorithm) feeds the demo's odds and is
         // the price when the server is unreachable.
-        const TWAP_WINDOW_S = 15;
+        const TWAP_WINDOW_S = 5;
         let twapHistory = [];           // [{time, price}] one point per second
         let twapPrice = null;
         let twapFromServer = false;
@@ -1355,7 +1355,15 @@
         // Smooth grid centering (spring physics) - NOT for price line
         let displayPrice = null;  // Smoothed price for grid centering only
         let priceVelocity = 0;
-        const priceSmoothingFactor = 0.25; // Higher = faster response
+        const priceSmoothingFactor = 0.2; // Higher = faster response
+
+        // Line tip: springs toward each new TWAP value with a slight overshoot,
+        // so the line glides and settles instead of stepping. Display only —
+        // results always use the exact published TWAP.
+        let twapHead = null;
+        let twapHeadVel = 0;
+        const TWAP_HEAD_STIFFNESS = 0.09;
+        const TWAP_HEAD_DAMPING = 0.75;  // ~15% overshoot, settles in ~0.6s
         
         // Trading state - these are the ACTIVE values (sync'd from mode-specific vars)
         let balance = 10000;
@@ -2253,7 +2261,7 @@
             return estimatedJumpParams;
         }
 
-        // Monte Carlo simulation of the 15s TWAP (demo odds; real-money odds come
+        // Monte Carlo simulation of the 5s TWAP (demo odds; real-money odds come
         // from the server, which runs the same model). Each path simulates the
         // live price per second, turns it into buckets like localTwap, and rolls
         // the 60-bucket average forward from the buckets that already happened.
@@ -2581,8 +2589,9 @@
             // Current price guide (NOW → axis)
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
             ctx.beginPath();
-            ctx.moveTo(nowX, Math.round(centerY) + 0.5);
-            ctx.lineTo(right, Math.round(centerY) + 0.5);
+            const guideY = Math.round((twapHead !== null ? Math.max(padding.top, Math.min(bottom, priceToY(twapHead))) : centerY)) + 0.5;
+            ctx.moveTo(nowX, guideY);
+            ctx.lineTo(right, guideY);
             ctx.stroke();
             ctx.setLineDash([]);
 
@@ -2599,22 +2608,41 @@
                 ctx.stroke();
             }
 
-            // The game price: the TWAP (one point per second), extended to NOW
-            const recentHistory = twapHistory.filter(d => d.time >= timeStart - 1000 && d.time <= now);
-            if (recentHistory.length && twapPrice !== null) recentHistory.push({ time: now, price: twapPrice });
-            if (recentHistory.length > 1) {
+            // The game price: the TWAP (one point per second), drawn as a smooth
+            // spline that ends at the springy tip at NOW.
+            const headPrice = twapHead !== null ? twapHead : (twapPrice !== null ? twapPrice : price);
+            const headY = headPrice ? Math.max(padding.top, Math.min(bottom, priceToY(headPrice))) : centerY;
+            const recentHistory = twapHistory.filter(d => d.time >= timeStart - 2000 && d.time < now - 250);
+            if (recentHistory.length && headPrice) recentHistory.push({ time: now, price: headPrice });
+            const linePts = recentHistory.map(pt => [timeToX(pt.time), priceToY(pt.price)]);
+            // Catmull-Rom spline through every point, as cubic Beziers
+            const tracePath = (pts) => {
+                ctx.moveTo(pts[0][0], pts[0][1]);
+                for (let i = 0; i < pts.length - 1; i++) {
+                    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+                    ctx.bezierCurveTo(
+                        p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+                        p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+                        p2[0], p2[1]);
+                }
+            };
+            if (linePts.length > 1) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(padding.left, padding.top, chartWidth, chartHeight);
+                ctx.clip();
+
                 const grad = ctx.createLinearGradient(0, padding.top, 0, bottom);
                 grad.addColorStop(0, 'rgba(255, 255, 255, 0.07)');
                 grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
                 ctx.beginPath();
-                ctx.moveTo(timeToX(recentHistory[0].time), bottom);
-                for (const pt of recentHistory) ctx.lineTo(timeToX(pt.time), priceToY(pt.price));
-                ctx.lineTo(timeToX(recentHistory[recentHistory.length - 1].time), bottom);
+                tracePath(linePts);
+                ctx.lineTo(linePts[linePts.length - 1][0], bottom);
+                ctx.lineTo(linePts[0][0], bottom);
                 ctx.closePath();
                 ctx.fillStyle = grad;
                 ctx.fill();
 
-                ctx.save();
                 ctx.beginPath();
                 ctx.strokeStyle = '#f4f4f5';
                 ctx.lineWidth = 2;
@@ -2622,23 +2650,20 @@
                 ctx.lineJoin = 'round';
                 ctx.shadowColor = 'rgba(255, 255, 255, 0.35)';
                 ctx.shadowBlur = 10;
-                recentHistory.forEach((pt, i) => {
-                    const x = timeToX(pt.time), y = priceToY(pt.price);
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                });
+                tracePath(linePts);
                 ctx.stroke();
                 ctx.restore();
             }
 
-            // Current price dot
+            // Current price dot rides the line tip
             if (price) {
                 const pulse = (Math.sin(serverNow() / 450) + 1) / 2;
                 ctx.beginPath();
-                ctx.arc(nowX, centerY, 9 + pulse * 5, 0, Math.PI * 2);
+                ctx.arc(nowX, headY, 9 + pulse * 5, 0, Math.PI * 2);
                 ctx.fillStyle = `rgba(255, 255, 255, ${0.06 + pulse * 0.05})`;
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(nowX, centerY, 5, 0, Math.PI * 2);
+                ctx.arc(nowX, headY, 5, 0, Math.PI * 2);
                 ctx.fillStyle = '#fafafa';
                 ctx.fill();
             }
@@ -2649,13 +2674,13 @@
                 const text = '$' + formatPrice(tagPrice);
                 ctx.font = `600 10px ${CHART_MONO}`;
                 const w = Math.min(padding.right - 6, ctx.measureText(text).width + 12);
-                roundRectPath(right + 4, centerY - 10, w, 20, 5);
+                roundRectPath(right + 4, headY - 10, w, 20, 5);
                 ctx.fillStyle = '#fafafa';
                 ctx.fill();
                 ctx.fillStyle = '#0a0a0b';
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(text, right + 10, centerY + 0.5);
+                ctx.fillText(text, right + 10, headY + 0.5);
             }
 
             // Multipliers in FUTURE cells
@@ -2948,7 +2973,7 @@
                     } else {
                         const diff = target - displayPrice;
                         priceVelocity += diff * priceSmoothingFactor;
-                        priceVelocity *= 0.6; // Lower damping = faster catch-up
+                        priceVelocity *= 0.66; // ~15% overshoot: a livelier recenter, settles in ~0.45s
                         displayPrice += priceVelocity;
                         
                         if (Math.abs(diff) < 0.01 && Math.abs(priceVelocity) < 0.01) {
@@ -2958,6 +2983,17 @@
                     }
                 }
                 
+                // Line tip spring (bouncy glide to the latest TWAP)
+                if (target !== null) {
+                    if (twapHead === null || Math.abs(target - twapHead) > 30) {
+                        twapHead = target;
+                        twapHeadVel = 0;
+                    } else {
+                        twapHeadVel = (twapHeadVel + (target - twapHead) * TWAP_HEAD_STIFFNESS) * TWAP_HEAD_DAMPING;
+                        twapHead += twapHeadVel;
+                    }
+                }
+
                 // Update pattern cells every 500ms (not every frame)
                 if (currentTime - lastPatternUpdate > 500) {
                     lastPatternUpdate = currentTime;
@@ -3154,7 +3190,7 @@
             }
         }
 
-        // A published 15s TWAP point: the game's price moves, demo bets settle.
+        // A published 5s TWAP point: the game's price moves, demo bets settle.
         function onTwapPoint(t, v) {
             if (twapHistory.length && t <= twapHistory[twapHistory.length - 1].time) return;
             twapHistory.push({ time: t, price: v });

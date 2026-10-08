@@ -154,7 +154,7 @@ async function placeBets(wallet, requests) {
     if (seen.has(cell)) { rejected.push({ cell, reason: 'Duplicate cell' }); continue; }
     seen.add(cell);
     if (parsed.cellTs - now < GAME.MIN_LEAD_MS) { rejected.push({ cell, reason: 'Too late — that column is closing' }); continue; }
-    // The column's TWAP depends on the 15s before it. If that stretch already
+    // The column's TWAP depends on the 5s before it. If that stretch already
     // had a feed outage (or our startup), the bet could only end up void.
     if (feed.hadGap(parsed.cellTs - GAME.TWAP_WINDOW_S * 1000, now)) {
       rejected.push({ cell, reason: 'Price history warming up after an interruption — try a later column' }); continue;
@@ -266,7 +266,7 @@ async function settle(snap, outcome, evidence = {}) {
   }
 }
 
-// Settlement runs on the published 15s TWAP points (twap.js), one per second:
+// Settlement runs on the published 5s TWAP points (twap.js), one per second:
 // a bet wins if a point stamped inside its column lands in its $10 band.
 function onTwap(t, p) {
   for (const snap of open.values()) {
@@ -288,7 +288,7 @@ function sweep() {
     if (snap.pending) { settle(snap, snap.pending.outcome, snap.pending.evidence); continue; }
     const end = snap.cellTs + GAME.MS_PER_CELL;
     if (now < end + GAME.SETTLE_GRACE_MS) continue;
-    // The column's TWAP points cover live prices from 15s before it starts.
+    // The column's TWAP points cover live prices from 5s before it starts.
     if (feed.hadGap(snap.cellTs - GAME.TWAP_WINDOW_S * 1000, end)) {
       settle(snap, 'void', { voidReason: 'Price feed interrupted while this column was being priced — stake refunded' });
     } else {
