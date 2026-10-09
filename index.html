@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BTC Grid</title>
+    <title>paper-tap</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -98,15 +98,15 @@
 
         /* ---------------- Brand ---------------- */
         .brand { display: flex; align-items: center; gap: 10px; padding: 0 2px 4px; }
-        .brand-mark {
-            width: 28px; height: 28px;
-            display: grid; place-items: center;
-            border-radius: 8px;
-            background: var(--accent);
-            color: var(--accent-ink);
-            font-weight: 700; font-size: 15px;
+        /* Logo: "paper-tap" set in mono, the dash blinking like a typing cursor */
+        .logo {
+            font-family: var(--mono); font-size: 20px; font-weight: 600;
+            letter-spacing: -0.03em; line-height: 28px;
+            color: var(--text); white-space: nowrap; user-select: none;
         }
-        .brand-name { font-size: 16px; font-weight: 600; letter-spacing: -0.02em; }
+        .logo-dash { display: inline-block; animation: logoCaret 1.06s steps(1, end) infinite; }
+        @keyframes logoCaret { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+        @media (prefers-reduced-motion: reduce) { .logo-dash { animation: none; } }
 
         /* ---------------- Demo / Real segmented toggle ---------------- */
         .mode-toggle-container {
@@ -910,8 +910,7 @@
         <!-- ================= SIDEBAR: account + trading controls ================= -->
         <aside class="sidebar">
             <div class="brand">
-                <div class="brand-mark">₿</div>
-                <div class="brand-name">Grid</div>
+                <div class="logo" aria-label="paper-tap">paper<span class="logo-dash" aria-hidden="true">-</span>tap</div>
             </div>
 
             <div class="mode-toggle-container" title="Switch between demo and real money">
@@ -5135,22 +5134,15 @@
             cardRoundRect(g, 18.5, 18.5, W - 37, H - 37, 22);
             g.stroke();
 
-            // brand
-            cardRoundRect(g, 60, 56, 44, 44, 11);
-            g.fillStyle = '#fafafa';
-            g.fill();
-            g.fillStyle = '#0a0a0b';
-            g.font = `700 24px ${SANS}`;
-            g.textAlign = 'center';
-            g.textBaseline = 'middle';
-            g.fillText('₿', 82, 79);
+            // brand: the paper-tap wordmark
             g.textAlign = 'left';
+            g.textBaseline = 'middle';
             g.fillStyle = '#fafafa';
-            g.font = `600 26px ${SANS}`;
-            g.fillText('Grid', 118, 70);
+            g.font = `600 32px ${MONO}`;
+            g.fillText('paper-tap', 58, 72);
             g.fillStyle = '#71717a';
             g.font = `500 15px ${MONO}`;
-            g.fillText('BTC/USDT · 10s × $10 grid', 118, 94);
+            g.fillText('BTC/USDT · 10s × $10 grid', 60, 102);
 
             // period + rank pills, top right
             let px = W - 60;
@@ -5283,7 +5275,7 @@
         function pnlShareText() {
             const s = pnlStats || { pnl: 0, period: '7d' };
             const link = refLink(currentAddress);
-            return `${usd(s.pnl, true)} on BTC Grid · ${PERIOD_LABEL[s.period] || ''}\nPlay the 10s × $10 BTC grid with my link: ${link}`;
+            return `${usd(s.pnl, true)} on paper-tap · ${PERIOD_LABEL[s.period] || ''}\nPlay the 10s × $10 BTC grid with my link: ${link}`;
         }
         function pnlBlob() { return new Promise((resolve) => pnlCanvas.toBlob(resolve, 'image/png')); }
         function pnlDownload() {
