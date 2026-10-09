@@ -70,6 +70,11 @@ const GAME = {
   // fresh quote fell below this fraction of what they saw, it's rejected as
   // "odds changed" instead of silently filling them at a much worse price.
   QUOTE_SLIPPAGE_FLOOR: 0.8,
+  // Last look. An accepted bet is held this long and re-priced with the data
+  // that arrived meanwhile; if the odds got worse it keeps the LOWER
+  // multiplier (never rejected, never raised). Someone with a faster Binance
+  // feed can't fill at odds our feed hasn't caught up with yet.
+  BET_HOLD_MS: 400,
   // Re-run the simulation for a bet if the cached one is older / further away
   // than this.
   QUOTE_MAX_AGE_MS: 500,

@@ -155,12 +155,19 @@ function nextGrid() {
   ok(/Odds changed/.test(reasons), 'inflated client multiplier (3x the quote) refused');
 
   const lowerSeen = Math.max(1.01, Math.floor(later.m * 0.9 * 100) / 100);
+  const t2 = Date.now();
   const r2 = await api('/bets', { method: 'POST', token: pt, body: { bets: [
     { cell: likely.k, amount: 20, seenMult: likely.m },
     { cell: longShot.k, amount: 10 },
     { cell: later.k, amount: 10, seenMult: lowerSeen },
   ] } });
+  const held = Date.now() - t2;
   ok(r2.status === 200 && r2.body.accepted.length === 3, `3 valid bets accepted (${r2.body.rejected.map(r => r.reason).join(', ') || 'none rejected'})`);
+  ok(held >= 400 && Array.isArray(r2.body.repriced)
+    && r2.body.repriced.every(x => x.to < x.from && r2.body.accepted.some(b => b.cell === x.cell && b.multiplier === x.to)),
+    `last look: answered after the 400ms hold (${held}ms), ${r2.body.repriced.length} multiplier(s) lowered, none raised or rejected`);
+  const likelyBet = r2.body.accepted.find(b => b.cell === likely.k);
+  ok(likelyBet && likelyBet.multiplier <= likely.m + 1e-9, `filled at no more than the multiplier seen (${likely.m}x → ${likelyBet && likelyBet.multiplier}x)`);
   const lowered = r2.body.accepted.find(b => b.cell === later.k);
   ok(lowered && lowered.multiplier <= lowerSeen + 1e-9, `player who saw a LOWER multiplier (${lowerSeen}x) is filled at no more than it (${lowered && lowered.multiplier}x)`);
 

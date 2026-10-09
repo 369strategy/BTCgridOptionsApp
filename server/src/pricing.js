@@ -269,6 +269,12 @@ function freshSim() {
   return latest;
 }
 
+/** A simulation run at or after time t (only feed data up to then counts). */
+function simSince(t) {
+  if (!latest || latest.simTime < t) latest = simulate();
+  return latest;
+}
+
 /** Periodic simulation for the grid broadcast. */
 function tick() {
   latest = simulate();
@@ -276,6 +282,6 @@ function tick() {
 }
 
 module.exports = {
-  freshSim, tick, cellKey, multiplierFor, calculateVolatility, estimateJumpParameters,
+  freshSim, simSince, tick, cellKey, multiplierFor, calculateVolatility, estimateJumpParameters,
   get latest() { return latest; },
 };

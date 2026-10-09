@@ -131,9 +131,12 @@ function parseCell(cell) {
 
 /**
  * requests: [{ cell: "<cellTs>_<level>", amount, seenMult? }]
- * Returns { accepted: [...publicBet], rejected: [{ cell, reason }] }.
+ * Returns { accepted: [...publicBet], rejected: [{ cell, reason }],
+ *           repriced: [{ cell, from, to }] } — answered after the last-look
+ * hold, so `accepted` already carries the final multipliers.
  */
 async function placeBets(wallet, requests) {
+  const received = Date.now();
   if (flags.betsPaused) throw httpError(503, 'Betting is paused');
   if (!Array.isArray(requests) || requests.length === 0) throw httpError(400, 'No bets');
   if (requests.length > GAME.MAX_CELLS_PER_REQUEST) throw httpError(400, `At most ${GAME.MAX_CELLS_PER_REQUEST} cells per request`);
@@ -218,7 +221,49 @@ async function placeBets(wallet, requests) {
 
   for (const b of accepted) open.set(b.id, toSnapshot(b));
   if (accepted.length) events.emit('account', wallet);
-  return { accepted: accepted.map(publicBet), rejected };
+  const repriced = accepted.length ? await lastLook(accepted, received + GAME.BET_HOLD_MS) : [];
+  return { accepted: accepted.map(publicBet), rejected, repriced };
+}
+
+/**
+ * Last look (GAME.BET_HOLD_MS): once the hold has passed, re-price the
+ * accepted bets with the feed data that arrived meanwhile and keep the LOWER
+ * multiplier. Nothing is rejected here — a multiplier can only go down. The
+ * bets are already placed (stake in escrow, cell taken); their columns are
+ * >= 10s away, so none can settle during the hold.
+ */
+async function lastLook(bets, holdEnd) {
+  const wait = holdEnd - Date.now();
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  const sim = pricing.simSince(holdEnd);
+  if (!sim) return []; // feed down: arrival odds stand (an outage voids the bet anyway)
+  const repriced = [];
+  for (const bet of bets) {
+    const cell = `${Number(bet.cellTs)}_${Number(bet.priceLevel)}`;
+    const quote = sim.quotes[cell];
+    const from = Number(bet.multiplier);
+    // No quote = the price moved more than LEVELS_EACH_SIDE rows away from
+    // the cell, which only makes it less likely: arrival odds stand.
+    if (!quote) continue;
+    const to = floor2(quote.mult);
+    if (!(to < from)) continue;
+    try {
+      const [n] = await Bet.update(
+        { multiplier: to.toFixed(4), quotedProb: quote.prob.toFixed(6) },
+        { where: { id: bet.id, status: 'open' } },
+      );
+      if (n !== 1) continue;
+    } catch (err) {
+      console.error(`[game] last look on bet ${bet.id} failed: ${err.message}`);
+      continue;
+    }
+    bet.multiplier = to.toFixed(4);
+    bet.quotedProb = quote.prob.toFixed(6);
+    const snap = open.get(bet.id);
+    if (snap) snap.mult = to;
+    repriced.push({ cell, from, to });
+  }
+  return repriced;
 }
 
 // ---------------------------------------------------------------------------

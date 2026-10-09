@@ -4123,6 +4123,14 @@
                 for (const bet of result.accepted) {
                     realLockedBoxes[bet.cell] = boxFromBet(bet, realLockedBoxes[bet.cell]);
                 }
+                // The server re-prices every bet 400ms after it arrives and keeps
+                // the lower multiplier (last look); `accepted` already has the final one.
+                if (result.repriced && result.repriced.length) {
+                    const r = result.repriced;
+                    showToast(r.length === 1
+                        ? `Odds moved while placing: ${r[0].from.toFixed(2)}x → ${r[0].to.toFixed(2)}x`
+                        : `Odds moved while placing ${r.length} bets — multipliers updated`, 'info');
+                }
                 if (result.rejected.length) {
                     for (const r of result.rejected) delete realLockedBoxes[r.cell];
                     const reasons = [...new Set(result.rejected.map(r => r.reason))];
