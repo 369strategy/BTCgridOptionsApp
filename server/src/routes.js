@@ -1,7 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const config = require('./config');
-const { Bet, Withdrawal } = require('./db');
+const { Bet, Withdrawal, HeldDeposit } = require('./db');
 const ledger = require('./ledger');
 const solana = require('./solana');
 const feed = require('./priceFeed');
@@ -147,16 +147,18 @@ router.get('/history', auth.requireSession, wrap(async (req, res) => {
 // ---------------------------------------------------------------------------
 router.get('/admin/status', auth.requireSession, auth.requireAdmin, wrap(async (req, res) => {
   const vault = solana.vaultPubkey();
-  const [totals, exposure, review, chainUsdc, chainSol] = await Promise.all([
+  const [totals, exposure, review, held, chainUsdc, chainSol] = await Promise.all([
     ledger.totals(),
     game.openExposure(),
     Withdrawal.findAll({ where: { status: 'review' }, raw: true }),
+    HeldDeposit.findAll({ where: { status: 'held' }, attributes: ['amount'], raw: true }),
     vault ? solana.usdcBalanceOf(vault) : 0,
     vault ? solana.solBalanceOf(vault).catch(() => null) : null,
   ]);
   const owed = (totals.player || 0) + (totals.escrow || 0) + (totals.house || 0);
   res.json({
     vaultAddress: vault ? vault.toString() : null,
+    cluster: config.CLUSTER,
     onChain: { usdc: chainUsdc, sol: chainSol },
     ledger: totals,
     // USDC the vault must hold for players + open stakes + bankroll. On-chain
@@ -164,6 +166,8 @@ router.get('/admin/status', auth.requireSession, auth.requireAdmin, wrap(async (
     owed,
     solvent: chainUsdc + 1e-6 >= owed,
     exposure,
+    // in the vault but owed to nobody (explains on-chain > owed)
+    heldDeposits: { count: held.length, amount: held.reduce((s, h) => s + Number(h.amount), 0) },
     houseFree: (totals.house || 0) - exposure / config.GAME.MAX_EXPOSURE_FRAC,
     flags: game.flags,
     withdrawalsInReview: review,
@@ -192,6 +196,16 @@ router.get('/admin/players', auth.requireSession, auth.requireAdmin, wrap(async 
 // All trades of all players, newest first (?wallet=&status=&before=<id>&limit=).
 router.get('/admin/bets', auth.requireSession, auth.requireAdmin, wrap(async (req, res) => {
   res.json(await admin.betsReport(req.query));
+}));
+
+// USDC that reached the vault but wasn't credited (no memo, sent on someone's behalf, ...).
+router.get('/admin/held-deposits', auth.requireSession, auth.requireAdmin, wrap(async (req, res) => {
+  res.json(await admin.heldDepositsReport());
+}));
+
+// Every withdrawal, players and house (?status=&wallet=&kind=&before=<id>&limit=).
+router.get('/admin/withdrawals', auth.requireSession, auth.requireAdmin, wrap(async (req, res) => {
+  res.json(await admin.withdrawalsReport(req.query));
 }));
 
 router.post('/admin/house-edge',

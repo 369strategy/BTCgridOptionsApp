@@ -242,6 +242,14 @@ function nextGrid() {
   ok(allTr.status === 200 && allTr.body.bets.length <= 5 && allTr.body.bets.every((b, i, a) => i === 0 || a[i - 1].id > b.id),
     `admin trade list across all players, newest first (${allTr.body.bets.length} shown, more: ${allTr.body.hasMore})`);
 
+  ok((await api('/admin/held-deposits', { token: pt })).status === 403 && (await api('/admin/withdrawals', { token: pt })).status === 403,
+    'non-admin cannot read held deposits or withdrawals');
+  const hd = await api('/admin/held-deposits', { token: at });
+  const wl = await api('/admin/withdrawals?limit=5', { token: at });
+  ok(hd.status === 200 && Array.isArray(hd.body.items) && wl.status === 200 && Array.isArray(wl.body.items) && wl.body.items.length <= 5
+    && typeof st.body.heldDeposits.amount === 'number',
+    `admin held-deposit list (${hd.body.items.length}) and withdrawal list (${wl.body.items.length} shown) load`);
+
   // house edge: admin-only, signed, bounded
   const edge0 = st.body.config.houseEdge;
   const edgeBody = (v, signedV = v, kp = admin) => ({ value: v, ...signedAction(kp, 'set_house_edge', { Value: signedV.toFixed(2) }) });

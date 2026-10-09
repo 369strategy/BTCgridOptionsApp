@@ -2,7 +2,7 @@
 // money and profit/loss, and the full trade list. Read-only.
 const { Op } = require('sequelize');
 const config = require('./config');
-const { sequelize, Bet, Deposit, Withdrawal, LedgerEntry, Player } = require('./db');
+const { sequelize, Bet, Deposit, Withdrawal, LedgerEntry, Player, HeldDeposit } = require('./db');
 const game = require('./game');
 
 const round2 = (x) => Math.round(Number(x || 0) * 100) / 100;
@@ -120,4 +120,33 @@ async function betsReport({ wallet, status, before, limit } = {}) {
   };
 }
 
-module.exports = { recordLogin, playersReport, betsReport };
+/** USDC sitting in the vault that was never credited to anyone. */
+async function heldDepositsReport() {
+  const rows = await HeldDeposit.findAll({ where: { status: 'held' }, order: [['createdAt', 'DESC']], limit: 500, raw: true });
+  return {
+    items: rows.map(r => ({ ...r, amount: Number(r.amount) })),
+    total: round2(rows.reduce((s, r) => s + Number(r.amount), 0)),
+  };
+}
+
+/** Withdrawals (players and house), newest first; ?status=&wallet=&kind=&before=<id>&limit= */
+async function withdrawalsReport({ status, wallet, kind, before, limit } = {}) {
+  const where = {};
+  if (status && ['sending', 'completed', 'failed', 'review'].includes(status)) where.status = status;
+  if (kind && ['player', 'house'].includes(kind)) where.kind = kind;
+  if (wallet) where.wallet = String(wallet);
+  if (Number(before) > 0) where.id = { [Op.lt]: Number(before) };
+  const n = Math.max(1, Math.min(500, Number(limit) || 200));
+  const rows = await Withdrawal.findAll({ where, order: [['id', 'DESC']], limit: n, raw: true });
+  const totals = await Withdrawal.findAll({
+    attributes: ['status', [sequelize.fn('COUNT', sequelize.col('id')), 'n'], [sequelize.fn('SUM', sequelize.col('amount')), 'sum']],
+    group: ['status'], raw: true,
+  });
+  return {
+    items: rows.map(w => ({ ...w, amount: Number(w.amount) })),
+    hasMore: rows.length === n,
+    byStatus: Object.fromEntries(totals.map(t => [t.status, { count: Number(t.n), amount: round2(t.sum) }])),
+  };
+}
+
+module.exports = { recordLogin, playersReport, betsReport, heldDepositsReport, withdrawalsReport };

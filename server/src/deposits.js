@@ -1,7 +1,7 @@
 // USDC deposits, ported from perfect-nature (services/usdcDeposits.js): verify
 // on-chain, credit exactly what arrived, replay-guard every signature, and
 // finalize/reconcile server-side so a closed tab never loses a deposit.
-const { sequelize, ProcessedTx, PendingDeposit, Deposit } = require('./db');
+const { sequelize, ProcessedTx, PendingDeposit, Deposit, HeldDeposit } = require('./db');
 const config = require('./config');
 const ledger = require('./ledger');
 const solana = require('./solana');
@@ -26,7 +26,10 @@ async function creditDeposit({ signature, expectedFrom }) {
   if (await ProcessedTx.findByPk(signature)) return { status: 'already' };
 
   const tx = await solana.inspectVaultDeposit(signature);
-  if (!tx.ok) return { status: tx.pending ? 'pending' : 'rejected', reason: tx.reason };
+  if (!tx.ok) {
+    if (!tx.pending && tx.received > config.MONEY.PAYMENT_TOLERANCE) await hold(signature, tx, tx.reason);
+    return { status: tx.pending ? 'pending' : 'rejected', reason: tx.reason };
+  }
   if (expectedFrom && tx.from !== expectedFrom) {
     return { status: 'rejected', reason: 'Transaction was not signed by your wallet' };
   }
@@ -37,7 +40,11 @@ async function creditDeposit({ signature, expectedFrom }) {
   let kind;
   if (config.ADMIN_WALLETS.includes(tx.from)) kind = 'house';
   else if (tx.memo.includes(config.DEPOSIT_MEMO)) kind = 'player';
-  else return { status: 'rejected', reason: 'Transfer is missing the deposit memo' };
+  else {
+    const reason = 'Transfer is missing the deposit memo';
+    await hold(signature, tx, reason);
+    return { status: 'rejected', reason };
+  }
 
   const amount = tx.received;
   try {
@@ -56,9 +63,22 @@ async function creditDeposit({ signature, expectedFrom }) {
     if (err.name === 'SequelizeUniqueConstraintError') return { status: 'already' };
     throw err;
   }
+  await HeldDeposit.update({ status: 'credited' }, { where: { signature } }).catch(() => {});
   console.log(`[deposit] credited ${amount} USDC (${kind}) from ${tx.from} — ${signature}`);
   if (kind === 'player') events.emit('account', tx.from);
   return { status: 'credited', amount, kind, wallet: tx.from };
+}
+
+/** USDC arrived in the vault but can't be credited: list it for the admin. */
+async function hold(signature, tx, reason) {
+  try {
+    await HeldDeposit.upsert({
+      signature, sender: tx.from || null, feePayer: tx.feePayer || null,
+      amount: Number(tx.received).toFixed(6), reason: String(reason).slice(0, 300), status: 'held',
+    });
+  } catch (err) {
+    console.error(`[deposit] recording held deposit ${signature} failed: ${err.message}`);
+  }
 }
 
 /**
@@ -114,7 +134,10 @@ async function reconcile() {
   }
   for (const signature of signatures) {
     if (await ProcessedTx.findByPk(signature)) continue;
-    if (await PendingDeposit.findByPk(signature)) continue;
+    // still pending: the finalizer has it. A report that FAILED is checked
+    // again here, so a transfer that did reach the vault is never forgotten.
+    const reported = await PendingDeposit.findByPk(signature);
+    if (reported && reported.status === 'pending') continue;
     try {
       const r = await creditDeposit({ signature });
       if (r.status === 'rejected') {

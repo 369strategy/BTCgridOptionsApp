@@ -133,6 +133,53 @@
         </div>
 
         <div class="card">
+            <h2>Held deposits <span class="count" id="heldCount"></span></h2>
+            <div class="scroll" style="max-height:360px">
+                <table>
+                    <thead><tr>
+                        <th>First seen</th><th>Sent by</th><th class="num">Amount</th><th>Why it wasn't credited</th><th>Transaction</th>
+                    </tr></thead>
+                    <tbody id="held"></tbody>
+                </table>
+            </div>
+            <p class="sub" style="margin:10px 0 0">
+                USDC that reached the vault but was <b>not credited to anyone</b> — sent without the deposit memo (e.g. straight from an
+                exchange or a plain wallet Send), moved on someone's behalf, or from several wallets at once. It sits in the vault on top
+                of what is owed. Check the transaction before acting; a deposit that later becomes creditable drops off this list.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Withdrawals <span class="count" id="wdCount"></span></h2>
+            <div class="grid" id="wdTotals" style="margin-bottom:14px"></div>
+            <div class="row" style="margin-bottom:12px">
+                <select id="wdStatus" onchange="loadWithdrawals()">
+                    <option value="">All statuses</option>
+                    <option value="completed">Paid</option>
+                    <option value="review">Held for review</option>
+                    <option value="sending">Sending</option>
+                    <option value="failed">Failed (refunded)</option>
+                </select>
+                <select id="wdKind" onchange="loadWithdrawals()">
+                    <option value="">Players and house</option>
+                    <option value="player">Players</option>
+                    <option value="house">House profit</option>
+                </select>
+            </div>
+            <div class="scroll" style="max-height:420px">
+                <table>
+                    <thead><tr>
+                        <th class="num">#</th><th>Requested</th><th>Wallet</th><th>Type</th><th class="num">Amount</th><th>Status</th><th>Transaction</th><th>Note</th>
+                    </tr></thead>
+                    <tbody id="withdrawals"></tbody>
+                </table>
+            </div>
+            <div class="row" style="margin-top:10px">
+                <button class="secondary small" id="wdMoreBtn" onclick="loadMoreWithdrawals()" style="display:none">Load older withdrawals</button>
+            </div>
+        </div>
+
+        <div class="card">
             <h2>Withdraw house profit</h2>
             <div class="row">
                 <input id="houseAmt" type="number" min="1" step="0.01" placeholder="0.00">
@@ -158,6 +205,7 @@
 <script>
     let provider = null, wallet = null, token = null, status = null;
     let trades = [], tradesHasMore = false, edgeDirty = false;
+    let withdrawals = [], wdHasMore = false;
     const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     function b58(bytes) {
         const d = [0];
@@ -178,6 +226,8 @@
     const short = (w) => w.length > 12 ? w.slice(0, 4) + '…' + w.slice(-4) : w;
     const when = (d) => d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
     const clock = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour12: false });
+    // Solscan links on the server's network (a devnet test server gets ?cluster=devnet)
+    const scan = (kind, id) => `https://solscan.io/${kind}/${encodeURIComponent(id)}${status && status.cluster && status.cluster !== 'mainnet' ? '?cluster=' + encodeURIComponent(status.cluster) : ''}`;
     function say(text, cls) { $('msg').className = cls || ''; $('msg').textContent = text; }
 
     async function sign(action, extra = {}) {
@@ -222,7 +272,8 @@
 
     async function refresh() {
         try {
-            await Promise.all([load(), loadPlayers(), trades.length > 200 ? null : loadTrades()]);
+            await load();
+            await Promise.all([loadPlayers(), trades.length > 200 ? null : loadTrades(), loadHeld(), withdrawals.length > 200 ? null : loadWithdrawals()]);
         } catch (e) { say(e.message, 'bad'); }
     }
 
@@ -240,6 +291,7 @@
             ['Open exposure', money(status.exposure)],
             ['Feed', esc(status.feed.source) + (status.feed.live ? ' <span class="ok">live</span>' : ' <span class="bad">down</span>')],
             ['House edge', Math.round(status.config.houseEdge * 100) + '%'],
+            ['Held deposits (owed to nobody)', status.heldDeposits.count ? `<span class="warn">${money(status.heldDeposits.amount)}</span> <span class="muted" style="font-size:12px">(${status.heldDeposits.count})</span>` : money(0)],
         ];
         $('solvency').innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
         $('vaultAddr').textContent = status.vaultAddress || '(not configured)';
@@ -248,7 +300,7 @@
         $('wdBtn').textContent = status.flags.withdrawalsPaused ? 'Resume withdrawals' : 'Pause withdrawals';
         const rv = status.withdrawalsInReview;
         $('review').innerHTML = !rv.length ? 'None' : '<table><tr><th>ID</th><th>Wallet</th><th>Amount</th><th>Signature</th></tr>'
-            + rv.map(w => `<tr><td>${w.id}</td><td><code>${esc(w.wallet)}</code></td><td>${money(w.amount)}</td><td>${w.signature ? `<a target="_blank" rel="noopener" href="https://solscan.io/tx/${encodeURIComponent(w.signature)}">check on Solscan</a>` : '—'}</td></tr>`).join('')
+            + rv.map(w => `<tr><td>${w.id}</td><td><code>${esc(w.wallet)}</code></td><td>${money(w.amount)}</td><td>${w.signature ? `<a target="_blank" rel="noopener" href="${scan('tx', w.signature)}">check on Solscan</a>` : '—'}</td></tr>`).join('')
             + '</table><p class="sub">Unknown-outcome payouts. Check the signature on-chain before doing anything: if it landed, the user was paid.</p>';
         showEdge();
     }
@@ -303,7 +355,7 @@
         $('players').innerHTML = r.players.map(p => `
             <tr class="player${p.wallet === sel ? ' selected' : ''}" data-wallet="${esc(p.wallet)}" onclick="showPlayer(this.dataset.wallet)" title="${esc(p.wallet)}">
                 <td class="wallet">${esc(short(p.wallet))}${p.isAdmin ? '<span class="tag">admin</span>' : ''}
-                    <a href="https://solscan.io/account/${encodeURIComponent(p.wallet)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open on Solscan">↗</a></td>
+                    <a href="${scan('account', p.wallet)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open on Solscan">↗</a></td>
                 <td class="num">${p.logins}</td>
                 <td>${when(p.lastSeenAt)}</td>
                 <td class="num">${money(p.balance)}</td>
@@ -377,6 +429,60 @@
                 <td class="muted">${evidence}</td>
             </tr>`;
         }).join('') || '<tr><td colspan="12" class="muted">No trades</td></tr>';
+    }
+
+    // ---------------- held deposits ----------------
+    async function loadHeld() {
+        const r = await api('/admin/held-deposits');
+        $('heldCount').textContent = r.items.length ? `${r.items.length} · ${money(r.total)}` : '0';
+        $('held').innerHTML = r.items.map(h => `<tr>
+                <td>${when(h.createdAt)}</td>
+                <td class="wallet">${h.sender ? `<a href="${scan('account', h.sender)}" target="_blank" rel="noopener" title="${esc(h.sender)}">${esc(short(h.sender))}</a>` : '<span class="muted">several wallets</span>'}</td>
+                <td class="num">${money(h.amount)}</td>
+                <td class="muted" style="white-space:normal">${esc(h.reason)}</td>
+                <td><a href="${scan('tx', h.signature)}" target="_blank" rel="noopener">${esc(h.signature.slice(0, 10))}…</a></td>
+            </tr>`).join('') || '<tr><td colspan="5" class="muted">Nothing held — every transfer into the vault was credited</td></tr>';
+    }
+
+    // ---------------- withdrawals ----------------
+    function wdQuery(before) {
+        const q = new URLSearchParams({ limit: '200' });
+        if ($('wdStatus').value) q.set('status', $('wdStatus').value);
+        if ($('wdKind').value) q.set('kind', $('wdKind').value);
+        if (before) q.set('before', before);
+        return '/admin/withdrawals?' + q;
+    }
+    async function loadWithdrawals() {
+        const r = await api(wdQuery());
+        withdrawals = r.items;
+        wdHasMore = r.hasMore;
+        const bs = r.byStatus;
+        const stat = (k, label) => [label, bs[k] ? `${money(bs[k].amount)} <span class="muted" style="font-size:12px">(${bs[k].count})</span>` : money(0)];
+        $('wdTotals').innerHTML = [stat('completed', 'Paid out'), stat('review', 'Held for review'), stat('sending', 'Sending now'), stat('failed', 'Failed (refunded)')]
+            .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+        renderWithdrawals();
+    }
+    async function loadMoreWithdrawals() {
+        if (!withdrawals.length) return;
+        const r = await api(wdQuery(withdrawals[withdrawals.length - 1].id));
+        withdrawals = withdrawals.concat(r.items);
+        wdHasMore = r.hasMore;
+        renderWithdrawals();
+    }
+    function renderWithdrawals() {
+        $('wdCount').textContent = withdrawals.length + (wdHasMore ? '+' : '');
+        $('wdMoreBtn').style.display = wdHasMore ? '' : 'none';
+        const st = { completed: '<span class="ok">paid</span>', review: '<span class="bad">held for review</span>', sending: '<span class="warn">sending</span>', failed: '<span class="muted">failed — refunded</span>' };
+        $('withdrawals').innerHTML = withdrawals.map(w => `<tr>
+                <td class="num muted">${w.id}</td>
+                <td>${when(w.createdAt)}</td>
+                <td class="wallet"><a href="#" data-wallet="${esc(w.wallet)}" onclick="showPlayer(this.dataset.wallet); return false" title="${esc(w.wallet)}">${esc(short(w.wallet))}</a></td>
+                <td>${w.kind === 'house' ? 'house profit' : 'player'}</td>
+                <td class="num">${money(w.amount)}</td>
+                <td>${st[w.status] || esc(w.status)}</td>
+                <td>${w.signature ? `<a href="${scan('tx', w.signature)}" target="_blank" rel="noopener">${esc(w.signature.slice(0, 10))}…</a>` : '—'}</td>
+                <td class="muted" style="white-space:normal">${esc(w.error || '')}</td>
+            </tr>`).join('') || '<tr><td colspan="8" class="muted">No withdrawals</td></tr>';
     }
 
     async function houseWithdraw() {

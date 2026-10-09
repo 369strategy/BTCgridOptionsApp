@@ -110,6 +110,18 @@ const Bet = sequelize.define('Bet', {
   ],
 });
 
+// USDC that reached the vault but was NOT credited to anyone (no deposit memo,
+// sent on someone's behalf, several senders). Listed on the admin dashboard;
+// 'credited' if it later becomes creditable (e.g. the sender becomes an admin).
+const HeldDeposit = sequelize.define('HeldDeposit', {
+  signature: { type: DataTypes.STRING, primaryKey: true },
+  sender: { type: DataTypes.STRING },        // wallet whose USDC moved (null if several)
+  feePayer: { type: DataTypes.STRING },
+  amount: { type: MONEY, allowNull: false },
+  reason: { type: DataTypes.STRING(300), allowNull: false },
+  status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'held' }, // held|credited
+}, { tableName: 'held_deposits', indexes: [{ fields: ['status'] }] });
+
 // Signed messages (login, withdraw, admin changes) are single-use: a signature
 // that was already accepted can't be sent again, even inside its 5-minute window.
 const UsedSignature = sequelize.define('UsedSignature', {
@@ -139,5 +151,5 @@ async function init() {
 
 module.exports = {
   sequelize, init,
-  LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player, UsedSignature,
+  LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player, UsedSignature, HeldDeposit,
 };

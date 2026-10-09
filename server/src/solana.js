@@ -141,15 +141,20 @@ function parseVaultDeposit(tx, vaultOwner, vaultAta) {
   const received = Number(receivedRaw) / 10 ** config.USDC_DECIMALS;
   const feePayer = keyAt(0);
   if (!(receivedRaw > 0n)) return { ok: true, from: feePayer, feePayer, received, memo }; // nothing came in
+  // (rejections below still say what arrived and from whom, so the deposit
+  // can be listed as held on the admin dashboard)
   if (sent.size !== 1) {
-    return { ok: false, reason: sent.size ? 'USDC came from more than one wallet — contact support' : 'Could not identify the sending wallet' };
+    return {
+      ok: false, received, feePayer, from: null, senders: [...sent.keys()],
+      reason: sent.size ? 'USDC came from more than one wallet — contact support' : 'Could not identify the sending wallet',
+    };
   }
   const [from] = sent.keys();
   // The owner of the USDC must have signed. A transfer made by a delegate or a
   // program on someone's behalf (owner didn't sign) is held for manual review
   // rather than credited to a guess.
   const signed = keys.some(k => k && k.signer && (k.pubkey ? k.pubkey.toString() : String(k)) === from);
-  if (!signed) return { ok: false, reason: 'The wallet that sent the USDC did not sign the transfer — contact support' };
+  if (!signed) return { ok: false, received, feePayer, from, reason: 'The wallet that sent the USDC did not sign the transfer — contact support' };
   return { ok: true, from, feePayer, received, memo };
 }
 
