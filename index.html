@@ -63,9 +63,10 @@
         :focus-visible { outline: 1px solid var(--border-3); outline-offset: 2px; }
 
         /* ---------------- App shell ---------------- */
-        /* Ultra-wide screens: the app stops growing at --app-max and sits
-           centered (screens up to that width are unchanged). */
-        :root { --app-max: 1920px; }
+        /* Ultra-wide screens (wider than 2:1, e.g. 3440x1440, 5120x1440): the
+           app stops growing at --app-max and sits centered. Normal screens,
+           including 2560x1440 and 4K, use the full width. */
+        :root { --app-max: max(1920px, 200vh); }
         .app {
             display: grid;
             grid-template-columns: 272px minmax(0, 1fr);
@@ -108,6 +109,9 @@
         .logo-dash { display: inline-block; animation: logoCaret 1.06s steps(1, end) infinite; }
         @keyframes logoCaret { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
         @media (prefers-reduced-motion: reduce) { .logo-dash { animation: none; } }
+        /* Phones/tablets: the sidebar moves below the chart, so the logo is
+           shown above the top bar instead. */
+        .mobile-brand { display: none; padding: 2px 4px 0; }
 
         /* ---------------- Demo / Real segmented toggle ---------------- */
         .mode-toggle-container {
@@ -606,6 +610,8 @@
             body { overflow: auto; }
             .app { grid-template-columns: 1fr; height: auto; }
             .sidebar { order: 2; overflow: visible; }
+            .sidebar .brand { display: none; }
+            .mobile-brand { display: block; }
             .main { order: 1; }
             .chart-container { height: 62vh; flex: none; }
             .topbar { flex-wrap: wrap; gap: 14px; }
@@ -1056,6 +1062,9 @@
 
         <!-- ================= MAIN: price + chart ================= -->
         <main class="main">
+            <div class="mobile-brand">
+                <div class="logo" aria-label="paper-tap">paper<span class="logo-dash" aria-hidden="true">-</span>tap</div>
+            </div>
             <header class="topbar">
                 <div class="asset-switcher">
                     <button class="asset" id="assetBtn" onclick="toggleAssetMenu(event)" aria-haspopup="listbox" aria-expanded="false" title="Change market">
