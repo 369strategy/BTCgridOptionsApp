@@ -39,7 +39,8 @@ function gridMessage(sim) {
   for (const [k, q] of Object.entries(sim.quotes)) quotes[k] = q.mult;
   return {
     type: 'grid', st: Date.now(), simTime: sim.simTime, simPrice: sim.simPrice,
-    simTwap: sim.simTwap, vol: sim.vol, jumpProb: sim.jumpProb, quotes,
+    simTwap: sim.simTwap, vol: sim.vol, volDriver: sim.volDriver, volCalm: sim.volCalm,
+    volEstimates: sim.volEstimates, jumpProb: sim.jumpProb, quotes,
   };
 }
 

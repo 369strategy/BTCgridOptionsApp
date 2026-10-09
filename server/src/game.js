@@ -278,6 +278,12 @@ function onEval(t, v) {
   prevEval = [t, v];
   if (!prev || v === null || prev[1] === null || t <= prev[0]) return;
   const [t0, v0] = prev;
+  // During a feed outage the line keeps gliding toward the last trade price —
+  // stale data anyone watching Binance can predict. Never pay a win on it:
+  // the bet is refunded by the sweep instead (its window overlaps the gap).
+  // Same threshold as the gap itself, so a skipped segment is always one the
+  // sweep will treat as an outage (never silently 'lost').
+  if (Date.now() - feed.lastMsgAt > GAME.FEED_GAP_MS || feed.hadGap(t0, t)) return;
   const at = (x) => v0 + (v - v0) * (x - t0) / (t - t0);
   for (const snap of open.values()) {
     if (snap.settling || snap.pending) continue;

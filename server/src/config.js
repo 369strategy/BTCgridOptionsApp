@@ -29,6 +29,35 @@ const GAME = {
   // Monte Carlo
   NUM_PATHS: 5000,
 
+  // Volatility. Each estimator is an exponentially weighted variance of the
+  // raw trade price sampled every 100ms over the last 15 minutes, with its own
+  // half-life; annualized, clamped to [VOL_MIN, VOL_MAX], times VOL_BUFFER.
+  // Odds are priced with the LARGEST, so they tighten within seconds of the
+  // market turning violent and never loosen because one estimator is calm.
+  // Must match index.html VOL_ESTIMATORS.
+  VOL_ESTIMATORS: [
+    { name: '15s', halfLifeS: 15 },
+    { name: '1m', halfLifeS: 60 },
+    { name: '2m', halfLifeS: 120 },
+    { name: '5m', halfLifeS: 300 },
+  ],
+  VOL_MIN: 0.25,
+  VOL_MAX: 5.0,
+  VOL_BUFFER: 1.1,
+  VOL_DEFAULT: 0.9,        // until any estimator has enough data
+  // An estimator only counts once the history covers 2 of its half-lives and
+  // the price changed at least this many times in that span (keeps the 15s
+  // one from pricing off a near-empty or frozen stretch).
+  VOL_MIN_MOVES: 20,
+  // A HIGHER volatility makes the cells right next to the price LESS likely
+  // (the line wanders off them), so pricing everything at the largest
+  // volatility would overpay exactly there. Every path is therefore also run
+  // at a calm volatility (the smallest raw estimate x VOL_CALM_FACTOR, no
+  // floor or buffer) with the same random numbers, and each cell gets the
+  // HIGHER of the two probabilities.
+  VOL_CALM_FACTOR: 0.8,
+  VOL_CALM_MIN: 0.05,
+
   // Multiplier = clamp((1 - HOUSE_EDGE) / prob, MIN_MULT, MAX_MULT).
   // The pre-merge app defaulted its slider to 50%; real money now uses this
   // fixed server value and ignores anything the browser sends.

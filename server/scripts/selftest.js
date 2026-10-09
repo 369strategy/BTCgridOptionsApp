@@ -114,6 +114,9 @@ function nextGrid() {
     .filter(c => c.ts - now > 12000)
     .sort((a, b) => a.ts - b.ts || a.m - b.m);
   ok(cells.length > 20, `server quotes ${Object.keys(grid.quotes).length} cells`);
+  const usable = Object.entries(grid.volEstimates || {}).filter(([, v]) => v !== null);
+  ok(grid.vol > 0 && typeof grid.volDriver === 'string' && usable.every(([, v]) => v <= grid.vol + 1e-12),
+    `grid prices at the largest volatility estimate (${(grid.vol * 100).toFixed(0)}% from ${grid.volDriver}; ${usable.map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`).join(', ')})`);
 
   const unfunded = await api('/bets', { method: 'POST', token: pt, body: { bets: [{ cell: cells[0].k, amount: 5 }] } });
   ok(unfunded.status === 200 && unfunded.body.rejected[0] && /Insufficient balance/.test(unfunded.body.rejected[0].reason),

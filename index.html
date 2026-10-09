@@ -452,6 +452,8 @@
         .stat-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; white-space: nowrap; }
         .stat-value { font-family: var(--mono); font-size: 13px; color: var(--text); white-space: nowrap; }
         #volatility, #jumpIntensity { color: var(--text) !important; }
+        .vol-driver { color: var(--text-3); letter-spacing: 0.02em; text-transform: none; }
+        .vol-driver.spike { color: #ffaa00; }
 
         .topbar-right { display: flex; align-items: center; gap: 14px; flex: none; margin-left: auto; }
         .clock { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
@@ -1056,8 +1058,8 @@
                         <div class="stat-label">24h Vol</div>
                         <div class="stat-value" id="volume24h">--</div>
                     </div>
-                    <div class="stat-card" id="volStat" title="Exponentially weighted (60s half-life, 1.1x buffer)">
-                        <div class="stat-label">Volatility</div>
+                    <div class="stat-card" id="volStat" title="Largest of the 15s / 1m / 2m / 5m volatility estimates (1.1x buffer)">
+                        <div class="stat-label">Volatility <span id="volDriver" class="vol-driver"></span></div>
                         <div class="stat-value" id="volatility">--%</div>
                     </div>
                     <div class="stat-card" id="jumpStat">
@@ -1409,6 +1411,9 @@
         let gridMultipliers = {};
         let simulationRunning = false;
         let estimatedVolatility = 0.9;
+        // Which estimator sets the volatility, the calm second run, and every
+        // estimate (server's in real mode, the demo's own otherwise).
+        let estimatedVolInfo = { driver: 'default', calm: null, estimates: {} };
         let lastSimTime = 0;
         
         // Smooth grid centering (spring physics) - NOT for price line
@@ -2189,161 +2194,133 @@
             return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
         }
 
-        // Calculate volatility with exponential decay weighting
-        // Samples price at fixed 100ms intervals for consistent measurement
+        // Volatility — mirror of server/src/pricing.js calculateVolatility.
+        // Several exponentially weighted estimates of the raw trade price
+        // (100ms samples, last 15 min), annualized, clamped, x1.1; the LARGEST
+        // prices the odds, so they tighten within seconds of a violent move and
+        // never loosen because one estimator is calm.
+        const VOL_ESTIMATORS = [
+            { name: '15s', halfLifeS: 15 },
+            { name: '1m', halfLifeS: 60 },
+            { name: '2m', halfLifeS: 120 },
+            { name: '5m', halfLifeS: 300 },
+        ];
+        const VOL_MIN = 0.25, VOL_MAX = 5.0, VOL_BUFFER = 1.1, VOL_DEFAULT = 0.9;
+        const VOL_MIN_MOVES = 20;      // price changes needed in 2 half-lives
+        const VOL_CALM_FACTOR = 0.8;   // calm second run (see runMonteCarloSimulation)
+        const VOL_CALM_MIN = 0.05;
         function calculateVolatility() {
-            if (priceHistory.length < 50) return 0.9; // Default 90% annualized
-            
+            const estimates = Object.fromEntries(VOL_ESTIMATORS.map(e => [e.name, null]));
+            const fallback = { vol: VOL_DEFAULT, driver: 'default', calm: VOL_DEFAULT, estimates };
+            if (priceHistory.length < 50) return fallback;
+
             const now = serverNow();
-            const halfLife = 60000; // 60 seconds half-life
-            const decayRate = Math.LN2 / halfLife;
-            const sampleInterval = 100; // 100ms between samples
-            
-            // Build time-based samples from price history
-            const returns = [];
-            const lookback = 15 * 60 * 1000; // 15 minutes
-            const startTime = now - lookback;
-            
-            // Find price at each 100ms interval
-            let lastSampleTime = startTime;
-            let lastSamplePrice = null;
-            
-            // Find initial price
-            for (const pt of priceHistory) {
-                if (pt.time >= startTime) {
-                    lastSamplePrice = pt.price;
-                    lastSampleTime = Math.floor(pt.time / sampleInterval) * sampleInterval;
-                    break;
+            const sampleInterval = 100;
+            const dt = sampleInterval / 1000;
+            const startTime = now - 15 * 60 * 1000;
+            let idx = 0;
+            while (idx < priceHistory.length && priceHistory[idx].time < startTime) idx++;
+            if (idx >= priceHistory.length) return fallback;
+            let lastSamplePrice = priceHistory[idx].price;
+            const firstSampleTime = Math.floor(priceHistory[idx].time / sampleInterval) * sampleInterval;
+
+            const n = VOL_ESTIMATORS.length;
+            const decay = VOL_ESTIMATORS.map(e => Math.LN2 / (e.halfLifeS * 1000));
+            const span = VOL_ESTIMATORS.map(e => 2 * e.halfLifeS * 1000);
+            const wss = new Float64Array(n), tw = new Float64Array(n), moves = new Int32Array(n);
+            for (let t = firstSampleTime + sampleInterval; t <= now; t += sampleInterval) {
+                while (idx < priceHistory.length - 1 && priceHistory[idx + 1].time <= t) idx++;
+                const p = priceHistory[idx].price;
+                const ret = Math.log(p / lastSamplePrice);
+                lastSamplePrice = p;
+                const x = (ret * ret) / dt; // squared return per second
+                const age = now - t;
+                for (let j = 0; j < n; j++) {
+                    const w = Math.exp(-decay[j] * age);
+                    wss[j] += w * x;
+                    tw[j] += w;
+                    if (ret !== 0 && age <= span[j]) moves[j]++;
                 }
             }
-            
-            if (!lastSamplePrice) return 0.9;
-            
-            // Sample at 100ms intervals
-            let historyIndex = 0;
-            for (let t = lastSampleTime + sampleInterval; t <= now; t += sampleInterval) {
-                // Find the last price at or before time t
-                while (historyIndex < priceHistory.length - 1 && 
-                       priceHistory[historyIndex + 1].time <= t) {
-                    historyIndex++;
-                }
-                
-                if (historyIndex >= priceHistory.length) break;
-                
-                const currentPrice = priceHistory[historyIndex].price;
-                if (lastSamplePrice && currentPrice) {
-                    const ret = Math.log(currentPrice / lastSamplePrice);
-                    const dt = sampleInterval / 1000; // 0.1 seconds
-                    const age = now - t;
-                    const weight = Math.exp(-decayRate * age);
-                    returns.push({ret, dt, weight});
-                }
-                
-                lastSamplePrice = currentPrice;
+
+            let vol = 0, driver = null, calmRaw = Infinity;
+            for (let j = 0; j < n; j++) {
+                if (now - firstSampleTime < span[j] || moves[j] < VOL_MIN_MOVES || !(tw[j] > 0)) continue;
+                const raw = Math.sqrt((wss[j] / tw[j]) * 365 * 24 * 60 * 60);
+                const v = Math.max(VOL_MIN, Math.min(VOL_MAX, raw)) * VOL_BUFFER;
+                estimates[VOL_ESTIMATORS[j].name] = v;
+                if (v > vol) { vol = v; driver = VOL_ESTIMATORS[j].name; }
+                calmRaw = Math.min(calmRaw, raw);
             }
-            
-            if (returns.length < 10) return 0.9;
-            
-            // Calculate weighted variance normalized to 1-second
-            let weightedSumSq = 0;
-            let totalWeight = 0;
-            
-            for (const r of returns) {
-                const normalized = r.ret / Math.sqrt(r.dt); // Normalize to 1-second
-                weightedSumSq += r.weight * normalized * normalized;
-                totalWeight += r.weight;
-            }
-            
-            if (totalWeight === 0) return 0.9;
-            
-            const weightedVariance = weightedSumSq / totalWeight;
-            
-            // Annualize: variance per second * seconds per year
-            const annualized = Math.sqrt(weightedVariance * 365 * 24 * 60 * 60);
-            
-            // Clamp between 25% and 500% annualized, then apply 1.1x buffer
-            const clamped = Math.max(0.25, Math.min(5.0, annualized));
-            return clamped * 1.1; // 10% vol buffer for house edge
+            if (!driver) return fallback;
+            if (vol <= VOL_MIN * VOL_BUFFER) driver = 'floor';
+            const calm = Math.min(vol, Math.max(VOL_CALM_MIN, calmRaw * VOL_CALM_FACTOR));
+            return { vol, driver, calm, estimates };
         }
-        
+
         // Adaptive jump estimation from price history
         // Uses threshold-based detection: returns > 3.5σ AND price move > $10 are classified as jumps
-        // Also uses exponential weighting for recent data priority
+        // Also uses exponential weighting for recent data priority.
+        // Jumps are simulated SYMMETRICALLY (mean folded into the size), as on the server.
         let estimatedJumpParams = {
             jumpProb: 0.008,   // Default 0.8% per second
-            jumpMean: 0,       // Default symmetric
+            jumpMean: 0,       // always 0: symmetric
             jumpVol: 0.003     // Default 0.3% magnitude
         };
-        
+
         function estimateJumpParameters() {
             if (priceHistory.length < 100) return estimatedJumpParams;
-            
+
             const now = serverNow();
             const halfLife = 5000; // 5 seconds half-life for jump detection
             const decayRate = Math.LN2 / halfLife;
-            
-            // Calculate returns at 1-second intervals
+
             const sampleRate = 5; // Sample every 5th tick
             const returns = [];
-            
+
             for (let i = sampleRate; i < priceHistory.length; i += sampleRate) {
                 const dt = (priceHistory[i].time - priceHistory[i - sampleRate].time) / 1000;
                 if (dt > 0 && dt < 30) { // Filter gaps > 30s
                     const ret = Math.log(priceHistory[i].price / priceHistory[i - sampleRate].price);
                     const priceDiff = Math.abs(priceHistory[i].price - priceHistory[i - sampleRate].price);
-                    // Normalize to 1-second return
                     const normalizedRet = ret / Math.sqrt(dt);
                     const age = now - priceHistory[i].time;
                     const weight = Math.exp(-decayRate * age);
                     returns.push({ret: normalizedRet, weight, priceDiff});
                 }
             }
-            
+
             if (returns.length < 30) return estimatedJumpParams;
-            
-            // Calculate weighted mean and std dev of returns
-            let totalWeight = returns.reduce((a, b) => a + b.weight, 0);
+
+            const totalWeight = returns.reduce((a, b) => a + b.weight, 0);
             if (totalWeight === 0) return estimatedJumpParams;
-            
+
             const mean = returns.reduce((a, b) => a + b.ret * b.weight, 0) / totalWeight;
             const variance = returns.reduce((a, b) => a + b.weight * (b.ret - mean) ** 2, 0) / totalWeight;
             const stdDev = Math.sqrt(variance);
-            
+
             if (stdDev === 0) return estimatedJumpParams;
-            
-            // Identify jumps as returns > 3.5 standard deviations OR price move > $10
+
+            // Jumps: returns > 3.5 standard deviations AND a price move of $10+
             const threshold = 3.5 * stdDev;
-            const minPriceMove = 10; // $10 move counts as jump
+            const minPriceMove = 10;
             const jumpReturns = returns.filter(r => Math.abs(r.ret - mean) > threshold && r.priceDiff >= minPriceMove);
-            
+
             if (jumpReturns.length < 2) {
-                // No significant jumps detected, use conservative defaults
-                return {
-                    jumpProb: 0.005,
-                    jumpMean: 0,
-                    jumpVol: stdDev * 0.5 // Use half the overall vol
-                };
+                estimatedJumpParams = { jumpProb: 0.005, jumpMean: 0, jumpVol: stdDev * 0.5 };
+                return estimatedJumpParams;
             }
-            
-            // Estimate jump parameters from detected jumps (weighted)
+
             const jumpTotalWeight = jumpReturns.reduce((a, b) => a + b.weight, 0);
             const jumpProb = Math.min(0.05, Math.max(0.001, jumpTotalWeight / totalWeight));
             const jumpMean = jumpReturns.reduce((a, b) => a + b.ret * b.weight, 0) / jumpTotalWeight;
             const jumpVariance = jumpReturns.reduce((a, b) => a + b.weight * (b.ret - jumpMean) ** 2, 0) / jumpTotalWeight;
-            const jumpVol = Math.sqrt(jumpVariance);
-            
+
             estimatedJumpParams = {
                 jumpProb: jumpProb,
-                jumpMean: jumpMean,
-                jumpVol: Math.max(0.001, Math.min(0.02, jumpVol)) // Clamp between 0.1% and 2%
+                jumpMean: 0,
+                jumpVol: Math.max(0.001, Math.min(0.02, Math.sqrt(jumpMean * jumpMean + jumpVariance)))
             };
-            
-            console.log('Jump params updated:', 
-                'Prob:', (jumpProb * 100).toFixed(2) + '%',
-                'Mean:', (jumpMean * 100).toFixed(3) + '%',
-                'Vol:', (jumpVol * 100).toFixed(3) + '%',
-                'Detected:', jumpReturns.length, 'jumps from', returns.length, 'samples');
-            
             return estimatedJumpParams;
         }
 
@@ -2351,6 +2328,9 @@
         // from the server, which runs the same model). Each path simulates the
         // live price per second, turns it into buckets like localTwap, and rolls
         // the tapered 5-bucket average forward from the buckets that already happened.
+        // Every path runs at the largest volatility AND a calm one with the same
+        // random numbers; each cell takes the higher touch probability (a high
+        // volatility makes the cells next to the price LESS likely).
         function runMonteCarloSimulation() {
             if (!price || simulationRunning) return;
             if (isRealMode) return; // real-money odds come from the server
@@ -2365,14 +2345,17 @@
 
             const NUM_PATHS = 5000;
             const S0 = price;
-            const vol = calculateVolatility();
-            estimatedVolatility = vol;
-            const { jumpProb, jumpMean, jumpVol } = estimateJumpParameters();
+            const volInfo = calculateVolatility();
+            estimatedVolatility = volInfo.vol;
+            const { jumpProb, jumpVol } = estimateJumpParameters();
 
+            const scenVols = volInfo.calm < volInfo.vol * 0.98 ? [volInfo.vol, volInfo.calm] : [volInfo.vol];
+            estimatedVolInfo = { driver: volInfo.driver, calm: scenVols.length > 1 ? volInfo.calm : null, estimates: volInfo.estimates };
+            const nS = scenVols.length;
             const pricePerCell = 10; // $10 per cell
             const msPerCell = 10000; // 10 seconds per cell
-            const volPerStep = vol * Math.sqrt(1 / (365 * 24 * 60 * 60));
-            const drift = -0.5 * volPerStep * volPerStep;
+            const volPerStep = scenVols.map(v => v * Math.sqrt(1 / (365 * 24 * 60 * 60)));
+            const drift = volPerStep.map(s => -0.5 * s * s);
 
             // Same priced band as the server: 12 rows each side (15 visible, the
             // rest reachable by panning up/down).
@@ -2397,35 +2380,42 @@
             const base = new Float64Array(W);
             for (let i = 0; i < W; i++) base[i] = known[known.length - W + i].v;
             const wts = TWAP_BUCKET_WEIGHTS;
-            const vals = new Float64Array(W + maxSteps);
+            const len = W + maxSteps;
+            const vals = new Float64Array(nS * len);
             const remainMs = Math.max(0, 1000 - part.knownMs);
 
-            const hits = new Uint32Array(12 * nLevels);
-            const touched = new Uint8Array(12 * nLevels);
+            const nCells = 12 * nLevels;
+            const hits = new Uint32Array(nS * nCells);
+            const touched = new Uint8Array(nS * nCells);
+            const S = new Float64Array(nS);
+            const prevTw = new Float64Array(nS);
             for (let path = 0; path < NUM_PATHS; path++) {
                 touched.fill(0);
-                vals.set(base);
-                let S = S0;
-                let prevTw = startTw;
+                for (let s = 0; s < nS; s++) { vals.set(base, s * len); S[s] = S0; prevTw[s] = startTw; }
                 for (let k = 1; k <= maxSteps; k++) {
-                    const prev = S;
                     let jump = 0;
-                    if (Math.random() < jumpProb) jump = jumpMean + jumpVol * randomNormal();
-                    S *= Math.exp(drift + volPerStep * randomNormal() + jump);
-                    const v = k === 1 ? (part.knownSum + ((prev + S) / 2) * remainMs) / 1000 : (prev + S) / 2;
-                    vals[W + k - 1] = v;
-                    let tw = 0;
-                    for (let j = 0; j < W; j++) tw += wts[j] * vals[W + k - 1 - j];
+                    if (Math.random() < jumpProb) jump = jumpVol * randomNormal();
+                    const z = randomNormal();
                     const col = colAt[k];
-                    if (col >= 0) {
-                        const a = Math.max(minLevel, Math.floor(Math.min(prevTw, tw) / pricePerCell) * pricePerCell);
-                        const b = Math.min(maxLevel, Math.floor(Math.max(prevTw, tw) / pricePerCell) * pricePerCell);
-                        for (let level = a; level <= b; level += pricePerCell) {
-                            const idx = col * nLevels + (level - minLevel) / pricePerCell;
-                            if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
+                    for (let s = 0; s < nS; s++) {
+                        const prev = S[s];
+                        const next = prev * Math.exp(drift[s] + volPerStep[s] * z + jump);
+                        S[s] = next;
+                        const v = k === 1 ? (part.knownSum + ((prev + next) / 2) * remainMs) / 1000 : (prev + next) / 2;
+                        const off = s * len;
+                        vals[off + W + k - 1] = v;
+                        let tw = 0;
+                        for (let j = 0; j < W; j++) tw += wts[j] * vals[off + W + k - 1 - j];
+                        if (col >= 0) {
+                            const a = Math.max(minLevel, Math.floor(Math.min(prevTw[s], tw) / pricePerCell) * pricePerCell);
+                            const b = Math.min(maxLevel, Math.floor(Math.max(prevTw[s], tw) / pricePerCell) * pricePerCell);
+                            for (let level = a; level <= b; level += pricePerCell) {
+                                const idx = s * nCells + col * nLevels + (level - minLevel) / pricePerCell;
+                                if (!touched[idx]) { touched[idx] = 1; hits[idx]++; }
+                            }
                         }
+                        prevTw[s] = tw;
                     }
-                    prevTw = tw;
                 }
             }
 
@@ -2434,8 +2424,10 @@
                 const ts = firstCell + c * msPerCell;
                 for (let l = 0; l < nLevels; l++) {
                     const pLevel = minLevel + l * pricePerCell;
+                    let h = 0;
+                    for (let s = 0; s < nS; s++) h = Math.max(h, hits[s * nCells + c * nLevels + l]);
                     newMultipliers[`${ts}_${pLevel}`] = {
-                        probability: hits[c * nLevels + l] / NUM_PATHS,
+                        probability: h / NUM_PATHS,
                         cellTs: ts, priceLevel: pLevel, simTime: now, simPrice: twapNow,
                     };
                 }
@@ -2514,6 +2506,7 @@
             }
             
             volatilityEl.textContent = (estimatedVolatility * 100).toFixed(0) + '%';
+            showVolDriver();
             
             // Update jump intensity display
             const jumpPct = (estimatedJumpParams.jumpProb * 100).toFixed(1);
@@ -2533,6 +2526,27 @@
             } else {
                 jumpIntensityEl.style.color = '#ff4444'; // High jumps
             }
+        }
+
+        // Which volatility estimator is setting the odds (next to the value),
+        // with every estimate in the tooltip.
+        const VOL_DRIVER_LABELS = { '15s': '15s', '1m': '1m', '2m': '2m', '5m': '5m', floor: 'min', default: '' };
+        function showVolDriver() {
+            const el = document.getElementById('volDriver');
+            const card = document.getElementById('volStat');
+            if (!el || !card) return;
+            const info = estimatedVolInfo || {};
+            const label = VOL_DRIVER_LABELS[info.driver] ?? (info.driver || '');
+            el.textContent = label ? '· ' + label : '';
+            el.className = 'vol-driver' + (info.driver === '15s' ? ' spike' : '');
+            const pct = (v) => v == null ? 'warming up' : (v * 100).toFixed(0) + '%';
+            const lines = Object.entries(info.estimates || {}).map(([k, v]) => `${k}: ${pct(v)}`);
+            const why = info.driver === 'floor' ? 'every estimate is below the 25% minimum (x1.1)'
+                : (info.driver === 'default' || !info.driver) ? 'not enough history yet — default 90%'
+                : `set by the ${info.driver} estimator (the largest)`;
+            card.title = `Volatility used for the odds: ${pct(estimatedVolatility)}, ${why}.\n`
+                + (lines.length ? lines.join(' · ') + '\n' : '')
+                + (info.calm ? `Cells next to the price are also checked at a calm ${pct(info.calm)} and priced at whichever is likelier.` : '');
         }
 
         // Resize canvas
@@ -3209,6 +3223,7 @@
             gridMultipliers = next;
             // Header shows the server's model inputs in real mode.
             estimatedVolatility = msg.vol;
+            estimatedVolInfo = { driver: msg.volDriver, calm: msg.volCalm ?? null, estimates: msg.volEstimates || {} };
             estimatedJumpParams = { ...estimatedJumpParams, jumpProb: msg.jumpProb };
         }
 

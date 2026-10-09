@@ -20,6 +20,12 @@ Runs on Railway (project `btc-grid`, service `btc-grid`, Postgres), serves
   the TWAP: each path simulates the live price and rolls the 5-second average
   forward from the seconds that already happened, so near columns (mostly
   decided) are priced correctly. Calibrated against hours of real Binance data.
+  Volatility is the LARGEST of four exponentially weighted estimates (15s, 1m,
+  2m, 5m half-lives), so odds tighten within seconds of a spike; each path is
+  also run at a calm volatility and every cell takes the likelier of the two
+  (high volatility makes the cells next to the price less likely). Jumps are
+  simulated symmetrically. No win is paid on a line that kept moving during a
+  feed outage — those bets are refunded.
   Bets are priced off a simulation at most 500ms old; a player is filled at
   `min(what they saw, fresh quote)`, and refused if the quote fell >20%.
 - **Bets** — need a wallet-signed session. The server checks timing (column must
