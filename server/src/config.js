@@ -107,6 +107,14 @@ const GAME = {
   FEED_GAP_MS: 3000,
   // Grace after a column closes before untouched bets are marked lost.
   SETTLE_GRACE_MS: 500,
+
+  // Big-win feed (bottom-left of the chart): a won bet is announced to every
+  // player when its profit is at least BIG_WIN_PROFIT dollars, or at least
+  // +200% of the stake (a multiplier of BIG_WIN_MULT or more). New visitors get
+  // the last BIG_WIN_KEEP of the past day.
+  BIG_WIN_PROFIT: 200,
+  BIG_WIN_MULT: 3,
+  BIG_WIN_KEEP: 20,
 };
 
 const MONEY = {

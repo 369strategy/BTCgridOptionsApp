@@ -13,11 +13,16 @@ const twap = require('./twap');
 const referral = require('./referral');
 
 const { GAME } = config;
-const events = new EventEmitter(); // 'bet' (wallet, payload), 'account' (wallet), 'houseEdge' (value)
+// 'bet' (wallet, payload), 'account' (wallet), 'houseEdge' (value),
+// 'crowd' (open bets changed), 'bigWin' (public win)
+const events = new EventEmitter();
 
 // In-memory mirror of open bets, so every tick can be checked without a query.
 // id -> { id, wallet, cellTs, level, amount, mult, hi, lo, settling, pending }
 const open = new Map();
+
+// Recent big wins for the public feed, newest first.
+const bigWins = [];
 
 const round2 = (x) => Math.round(x * 100) / 100;
 const floor2 = (x) => Math.floor(x * 100 + 1e-9) / 100;
@@ -74,6 +79,55 @@ async function loadOpenBets() {
   const rows = await Bet.findAll({ where: { status: 'open' } });
   for (const b of rows) open.set(b.id, toSnapshot(b));
   if (rows.length) console.log(`[game] restored ${rows.length} open bets`);
+}
+
+/** Wallets with an open bet on each cell: Map "cellTs_level" -> [wallet]. */
+function crowd() {
+  const byCell = new Map();
+  for (const s of open.values()) {
+    const key = `${s.cellTs}_${s.level}`;
+    const list = byCell.get(key);
+    if (list) list.push(s.wallet); else byCell.set(key, [s.wallet]);
+  }
+  return byCell;
+}
+
+// ---------------------------------------------------------------------------
+// Big-win feed
+// ---------------------------------------------------------------------------
+function isBigWin(amount, mult, payout) {
+  return payout - amount >= GAME.BIG_WIN_PROFIT - 1e-9 || mult >= GAME.BIG_WIN_MULT - 1e-9;
+}
+
+function publicWin(b) {
+  const amount = Number(b.amount);
+  const payout = Number(b.payout);
+  return {
+    id: b.id, wallet: b.wallet, amount, mult: Number(b.multiplier), payout,
+    profit: round2(payout - amount), at: new Date(b.settledAt).getTime(),
+  };
+}
+
+async function loadBigWins() {
+  const rows = await Bet.findAll({
+    where: {
+      status: 'won',
+      settledAt: { [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      [Op.or]: [
+        { multiplier: { [Op.gte]: GAME.BIG_WIN_MULT } },
+        sequelize.where(sequelize.literal('payout - amount'), { [Op.gte]: GAME.BIG_WIN_PROFIT }),
+      ],
+    },
+    order: [['settledAt', 'DESC']],
+    limit: GAME.BIG_WIN_KEEP,
+  });
+  bigWins.splice(0, bigWins.length, ...rows.map(publicWin));
+}
+
+/** Big wins of the past day, newest first. */
+function recentBigWins() {
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  return bigWins.filter(w => w.at >= since);
 }
 
 /** Worst-case net house payout if every open bet won. */
@@ -239,7 +293,10 @@ async function placeBets(wallet, requests) {
   }
 
   for (const b of accepted) open.set(b.id, toSnapshot(b));
-  if (accepted.length) events.emit('account', wallet);
+  if (accepted.length) {
+    events.emit('account', wallet);
+    events.emit('crowd');
+  }
   const repriced = accepted.length ? await lastLook(accepted, received + GAME.BET_HOLD_MS) : [];
   return { accepted: accepted.map(publicBet), rejected, repriced };
 }
@@ -323,9 +380,16 @@ async function settle(snap, outcome, evidence = {}) {
       return Bet.findByPk(snap.id, { transaction: t });
     });
     open.delete(snap.id);
+    events.emit('crowd');
     if (result) {
       events.emit('bet', snap.wallet, publicBet(result));
       events.emit('account', snap.wallet);
+      if (outcome === 'won' && isBigWin(Number(result.amount), Number(result.multiplier), Number(result.payout))) {
+        const win = publicWin(result);
+        bigWins.unshift(win);
+        if (bigWins.length > GAME.BIG_WIN_KEEP) bigWins.length = GAME.BIG_WIN_KEEP;
+        events.emit('bigWin', win);
+      }
     }
   } catch (err) {
     // Leave it open with the decided outcome recorded; the sweep retries it.
@@ -407,6 +471,7 @@ function onSource({ source }) {
 async function start() {
   await loadFlags();
   await loadOpenBets();
+  await loadBigWins();
   twap.on('eval', onEval);
   feed.on('source', onSource);
   setInterval(sweep, 250);
@@ -420,4 +485,5 @@ function httpError(status, message) {
 
 module.exports = {
   start, placeBets, account, openBetsFor, publicBet, openExposure, events, flags, setFlag, setHouseEdge, httpError,
+  crowd, recentBigWins,
 };

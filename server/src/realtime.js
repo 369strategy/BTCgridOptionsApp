@@ -7,6 +7,9 @@
 //   grid    every 1s: current server multipliers per cell
 //   feed    when the source changes (futures -> spot)
 //   config  when an admin changes the house edge
+//   crowd   when open bets change: how many OTHER players have an open bet on
+//           each cell (counts only, never wallets; your own bet isn't counted)
+//   bigWin  a won bet with profit >= $200 or >= +200% (hello carries the recent ones)
 //   account / bet   per signed-in wallet (after {type:'auth', token})
 const WebSocket = require('ws');
 const config = require('./config');
@@ -43,6 +46,38 @@ function gridMessage(sim) {
     simTwap: sim.simTwap, vol: sim.vol, volDriver: sim.volDriver, volCalm: sim.volCalm,
     volEstimates: sim.volEstimates, jumpProb: sim.jumpProb, quotes,
   };
+}
+
+// Open bets per cell as seen by `wallet` (its own bet left out).
+function crowdMessage(byCell, wallet) {
+  const cells = {};
+  for (const [key, wallets] of byCell) {
+    const n = wallets.length - (wallet && wallets.includes(wallet) ? 1 : 0);
+    if (n > 0) cells[key] = n;
+  }
+  return { type: 'crowd', cells };
+}
+
+function sendCrowd(ws) {
+  send(ws, crowdMessage(game.crowd(), ws.wallet));
+}
+
+// Bets settle a whole column at once, so changes are coalesced.
+let crowdTimer = null;
+function scheduleCrowd() {
+  if (crowdTimer || !wss) return;
+  crowdTimer = setTimeout(() => {
+    crowdTimer = null;
+    const byCell = game.crowd();
+    const bettors = new Set();
+    for (const wallets of byCell.values()) for (const w of wallets) bettors.add(w);
+    let shared = null; // the same message for everyone without an open bet
+    for (const ws of wss.clients) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      if (ws.wallet && bettors.has(ws.wallet)) send(ws, crowdMessage(byCell, ws.wallet));
+      else ws.send(shared || (shared = JSON.stringify(crowdMessage(byCell, null))));
+    }
+  }, 150);
 }
 
 async function pushAccount(wallet) {
@@ -92,8 +127,10 @@ function attach(server) {
       },
       ticks: history,
       twap: twap.points.map(pt => [pt.time, pt.price]),
+      bigWins: game.recentBigWins(),
     });
     if (pricing.latest) send(ws, gridMessage(pricing.latest));
+    sendCrowd(ws);
 
     ws.on('message', async (raw) => {
       let msg;
@@ -101,6 +138,7 @@ function attach(server) {
       if (msg.type === 'auth') {
         const wallet = auth.verifyToken(msg.token);
         ws.wallet = wallet || null;
+        sendCrowd(ws); // own bets are no longer counted as someone else's
         if (!wallet) return send(ws, { type: 'auth', ok: false });
         send(ws, { type: 'auth', ok: true, wallet });
         try {
@@ -144,6 +182,8 @@ function attach(server) {
 
   game.events.on('account', (wallet) => pushAccount(wallet));
   game.events.on('houseEdge', (houseEdge) => broadcast({ type: 'config', houseEdge }));
+  game.events.on('crowd', scheduleCrowd);
+  game.events.on('bigWin', (win) => broadcast({ type: 'bigWin', win }));
   game.events.on('bet', (wallet, bet) => {
     for (const ws of wss.clients) if (ws.wallet === wallet) send(ws, { type: 'bet', bet });
   });

@@ -88,6 +88,23 @@ function nextGrid() {
   });
 }
 
+// The 'crowd' message a socket gets: anonymous right after hello; signed in,
+// the one sent again once the session is attached.
+function crowdView(token) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(API.replace('http', 'ws') + '/ws');
+    const timer = setTimeout(() => { ws.close(); reject(new Error('no crowd message')); }, 15000);
+    let hello = null;
+    let seen = 0;
+    ws.on('open', () => { if (token) ws.send(JSON.stringify({ type: 'auth', token })); });
+    ws.on('message', (raw) => {
+      const msg = JSON.parse(raw);
+      if (msg.type === 'hello') hello = msg;
+      if (msg.type === 'crowd' && ++seen === (token ? 2 : 1)) { clearTimeout(timer); ws.close(); resolve({ hello, crowd: msg.cells }); }
+    });
+  });
+}
+
 (async () => {
   const P = player.publicKey.toBase58();
   console.log(`player ${P}\nadmin  ${admin.publicKey.toBase58()}\n`);
@@ -196,6 +213,11 @@ function nextGrid() {
   const inflated = r2.body.accepted.find(b => b.cell === longShot.k);
   ok(inflated && inflated.multiplier < longShot.m * 3 - 1e-9,
     `inflated client multiplier (${(longShot.m * 3).toFixed(2)}x) is accepted but paid only the server's odds (${inflated && inflated.multiplier}x)`);
+  const [anonView, ownView] = await Promise.all([crowdView(null), crowdView(pt)]);
+  ok(r2.body.accepted.every(b => (anonView.crowd[b.cell] || 0) - (ownView.crowd[b.cell] || 0) === 1),
+    'crowd: everyone else sees your bets counted on their cells; your own socket leaves them out');
+  ok(!JSON.stringify(anonView.crowd).includes(P) && Array.isArray(anonView.hello.bigWins),
+    'crowd carries counts only (no wallets); hello carries the big-win feed');
   const likelyBet = r2.body.accepted.find(b => b.cell === likely.k);
   ok(likelyBet && likelyBet.multiplier <= likely.m + 1e-9, `filled at no more than the multiplier seen (${likely.m}x → ${likelyBet && likelyBet.multiplier}x)`);
   const lowered = r2.body.accepted.find(b => b.cell === later.k);
