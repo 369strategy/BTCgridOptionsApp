@@ -22,14 +22,28 @@ async function hotWalletCanPay(amount) {
 }
 
 /**
- * kind 'player': pay `wallet` from its own balance.
- * kind 'house' : pay an admin `wallet` from the house bankroll, but never the
- *                part that open bets could still need.
+ * kind 'player'   : pay `wallet` from its own balance.
+ * kind 'affiliate': pay `wallet` its claimable affiliate earnings.
+ * kind 'house'    : pay an admin `wallet` from the house bankroll, but never
+ *                   the part that open bets could still need.
  */
 async function withdraw({ wallet, amount, kind = 'player' }) {
-  if (game.flags.withdrawalsPaused && kind === 'player') throw game.httpError(503, 'Withdrawals are paused');
+  if (game.flags.withdrawalsPaused && kind !== 'house') throw game.httpError(503, 'Withdrawals are paused');
+  // the ledger account the money leaves
+  const source = kind === 'house' ? { account: 'house' } : { account: kind === 'affiliate' ? 'affiliate' : 'player', walletAddress: wallet };
   const amt = Math.floor(Number(amount) * 100) / 100;
   if (!(amt >= MONEY.MIN_WITHDRAW)) throw game.httpError(400, `Minimum withdrawal is $${MONEY.MIN_WITHDRAW}`);
+
+  // Quick balance check first, so a request for money you don't have says so
+  // (it's checked again under the lock below — this one is only for the message).
+  if (kind !== 'house') {
+    const bal = await ledger.balance(source.account, wallet);
+    if (amt > bal + ledger.EPSILON) {
+      throw game.httpError(400, kind === 'affiliate'
+        ? `Only $${Math.max(0, bal).toFixed(2)} of affiliate earnings is claimable`
+        : `Insufficient balance ($${Math.max(0, bal).toFixed(2)} available)`);
+    }
+  }
 
   const liquidity = await hotWalletCanPay(amt);
   if (liquidity) throw game.httpError(503, liquidity);
@@ -52,6 +66,9 @@ async function withdraw({ wallet, amount, kind = 'player' }) {
         if (today + amt > MONEY.MAX_WITHDRAW_PER_DAY) {
           throw game.httpError(400, `Daily withdrawal limit is $${MONEY.MAX_WITHDRAW_PER_DAY} ($${Math.max(0, MONEY.MAX_WITHDRAW_PER_DAY - today).toFixed(2)} left today)`);
         }
+      } else if (kind === 'affiliate') {
+        const bal = await ledger.balance('affiliate', wallet, t);
+        if (amt > bal + ledger.EPSILON) throw game.httpError(400, `Only $${bal.toFixed(2)} of affiliate earnings is claimable`);
       } else {
         const house = await ledger.balance('house', null, t);
         const free = house - (await game.openExposure(t)) / GAME.MAX_EXPOSURE_FRAC;
@@ -60,9 +77,7 @@ async function withdraw({ wallet, amount, kind = 'player' }) {
 
       const w = await Withdrawal.create({ wallet, amount: amt.toFixed(6), kind, status: 'sending' }, { transaction: t });
       await ledger.postEntries([
-        kind === 'player'
-          ? { account: 'player', walletAddress: wallet, amount: -amt }
-          : { account: 'house', amount: -amt },
+        { ...source, amount: -amt },
         { account: 'external', amount: amt },
       ], `withdraw_${kind}`, w.id, wallet, t);
       return w;
@@ -81,15 +96,13 @@ async function withdraw({ wallet, amount, kind = 'player' }) {
     if (err.reversible === true) {
       await sequelize.transaction(async (t) => {
         await ledger.postEntries([
-          kind === 'player'
-            ? { account: 'player', walletAddress: wallet, amount: amt }
-            : { account: 'house', amount: amt },
+          { ...source, amount: amt },
           { account: 'external', amount: -amt },
         ], 'withdraw_refund', row.id, `payout failed: ${String(err.message).slice(0, 120)}`, t);
         await row.update({ status: 'failed', error: String(err.message).slice(0, 500) }, { transaction: t });
       });
       if (kind === 'player') game.events.emit('account', wallet);
-      throw game.httpError(502, `Payout failed and was refunded to your balance: ${err.message}`);
+      throw game.httpError(502, `Payout failed and was refunded${kind === 'affiliate' ? ' to your affiliate earnings' : ' to your balance'}: ${err.message}`);
     }
     console.error(`[withdraw] INDETERMINATE id=${row.id} sig=${err.signature || 'n/a'}: ${err.message}`);
     await row.update({ status: 'review', signature: err.signature || null, error: String(err.message).slice(0, 500) });
@@ -102,9 +115,10 @@ async function withdraw({ wallet, amount, kind = 'player' }) {
 }
 
 async function historyFor(wallet) {
-  const rows = await Withdrawal.findAll({ where: { wallet, kind: 'player' }, order: [['createdAt', 'DESC']], limit: 20 });
+  const rows = await Withdrawal.findAll({ where: { wallet, kind: ['player', 'affiliate'] }, order: [['createdAt', 'DESC']], limit: 20 });
   return rows.map(w => ({
-    type: 'withdrawal', amount: Number(w.amount), status: w.status, signature: w.signature, date: w.createdAt,
+    type: w.kind === 'affiliate' ? 'affiliate claim' : 'withdrawal',
+    amount: Number(w.amount), status: w.status, signature: w.signature, date: w.createdAt,
   }));
 }
 

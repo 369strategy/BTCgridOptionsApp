@@ -10,6 +10,7 @@ const ledger = require('./ledger');
 const feed = require('./priceFeed');
 const pricing = require('./pricing');
 const twap = require('./twap');
+const referral = require('./referral');
 
 const { GAME } = config;
 const events = new EventEmitter(); // 'bet' (wallet, payload), 'account' (wallet), 'houseEdge' (value)
@@ -65,6 +66,7 @@ function toSnapshot(b) {
     id: b.id, wallet: b.wallet, cellTs: Number(b.cellTs), level: Number(b.priceLevel),
     amount: Number(b.amount), mult: Number(b.multiplier),
     hi: null, lo: null, settling: false, pending: null,
+    placedAt: b.createdAt,
   };
 }
 
@@ -314,6 +316,10 @@ async function settle(snap, outcome, evidence = {}) {
         legs.push({ account: 'player', walletAddress: snap.wallet, amount: snap.amount });
       }
       await ledger.postEntries(legs, `bet_${outcome}`, snap.id, null, t);
+      // 1% of the stake to the player's referrer (won or lost; never void)
+      if (outcome !== 'void') {
+        await referral.creditCommission({ betId: snap.id, wallet: snap.wallet, stake: snap.amount, placedAt: snap.placedAt }, t);
+      }
       return Bet.findByPk(snap.id, { transaction: t });
     });
     open.delete(snap.id);

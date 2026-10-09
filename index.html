@@ -519,6 +519,84 @@
         .mult-scale i { display: inline-block; width: 10px; height: 6px; border-radius: 2px; }
         #chart { flex: 1; width: 100%; min-height: 0; display: block; cursor: default; }
 
+        /* ---------------- Leaderboard / Affiliate / P&L card ---------------- */
+        .side-links { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+        .side-link {
+            display: flex; flex-direction: column; align-items: center; gap: 5px;
+            padding: 9px 4px 8px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 11px; color: var(--text-2);
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .side-link:hover { background: var(--surface-3); border-color: var(--border-2); color: var(--text); }
+        .side-link svg { color: var(--text-3); }
+        .side-link:hover svg { color: var(--text); }
+
+        .modal-container.modal-wide { max-width: 760px; }
+        .modal-container.modal-card { max-width: 720px; }
+        .seg-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin-bottom: 14px; }
+        .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 9px; }
+        .seg button {
+            padding: 6px 11px; border: 0; border-radius: 7px; background: transparent;
+            font-size: 12px; color: var(--text-3);
+        }
+        .seg button:hover { color: var(--text); }
+        .seg button.active { background: var(--surface-3); color: var(--text); }
+
+        .lb-wrap { max-height: min(58vh, 560px); overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .lb-table th {
+            position: sticky; top: 0; z-index: 1;
+            background: var(--surface-2);
+            text-align: right; font-weight: 500; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--text-3); padding: 9px 10px; border-bottom: 1px solid var(--border);
+        }
+        .lb-table td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); white-space: nowrap; }
+        .lb-table th:nth-child(-n+2), .lb-table td:nth-child(-n+2) { text-align: left; }
+        .lb-table tr:last-child td { border-bottom: 0; }
+        .lb-table tr.me td { background: rgba(255, 255, 255, 0.045); }
+        .lb-rank { display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 6px; font-size: 11px; color: var(--text-3); }
+        .lb-rank.r1 { background: rgba(250, 204, 21, 0.14); color: #facc15; }
+        .lb-rank.r2 { background: rgba(212, 212, 216, 0.12); color: #d4d4d8; }
+        .lb-rank.r3 { background: rgba(217, 119, 6, 0.16); color: #f59e0b; }
+        .lb-you { margin-left: 6px; font-family: var(--font); font-size: 9px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); }
+        .lb-empty { padding: 34px 10px; text-align: center; color: var(--text-3); font-family: var(--font); }
+        .lb-foot { margin-top: 10px; font-size: 11px; color: var(--text-4); }
+        .pos { color: var(--green); } .neg { color: var(--red); }
+
+        .aff-hero { padding: 14px 14px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-2); margin-bottom: 14px; }
+        .aff-hero b { font-size: 15px; }
+        .aff-hero p { margin-top: 4px; font-size: 12px; color: var(--text-3); }
+        .aff-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 12px 0 14px; }
+        .aff-stat { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+        .aff-stat .k { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+        .aff-stat .v { margin-top: 3px; font-family: var(--mono); font-size: 15px; }
+        .aff-claim { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-2); border-radius: var(--radius); margin-bottom: 16px; }
+        .aff-claim .v { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+        .aff-row { display: flex; gap: 6px; }
+        .aff-row .modal-form-input { flex: 1; min-width: 0; font-size: 12px; }
+        .aff-btn {
+            padding: 0 14px; min-height: 38px; border-radius: var(--radius);
+            border: 1px solid var(--border-2); background: var(--surface-2);
+            font-size: 12px; font-weight: 500; white-space: nowrap;
+        }
+        .aff-btn:hover { background: var(--surface-3); }
+        .aff-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+        .aff-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .aff-note { margin-top: 6px; font-size: 11px; color: var(--text-4); }
+        .aff-label { font-size: 11px; color: var(--text-3); margin-bottom: 6px; }
+        .aff-section { margin-top: 16px; }
+
+        .pnl-preview { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: #0a0a0b; aspect-ratio: 1200 / 675; display: grid; place-items: center; color: var(--text-3); }
+        .pnl-preview canvas { width: 100%; height: auto; display: block; }
+        .pnl-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+        @media (max-width: 560px) {
+            .pnl-actions { grid-template-columns: repeat(2, 1fr); }
+            .lb-table .lb-hide-sm { display: none; }
+        }
+
         /* ---------------- Responsive ---------------- */
         @media (max-width: 1280px) {
             .stats-grid .stat-card:nth-child(n+4) { display: none; }
@@ -953,6 +1031,21 @@
 
             <div class="sidebar-spacer"></div>
 
+            <div class="side-links">
+                <button class="side-link" onclick="openLeaderboard()" title="Top players by P&amp;L, volume and biggest win">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3"/><path d="M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+                    Leaderboard
+                </button>
+                <button class="side-link" onclick="openAffiliate()" title="Earn 1% of what your referrals wager">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>
+                    Affiliate
+                </button>
+                <button class="side-link" onclick="openPnlCard()" title="Make a shareable P&amp;L card">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/></svg>
+                    Share P&amp;L
+                </button>
+            </div>
+
             <button class="wallet-btn" id="walletMainBtn" onclick="openDepositModal()">
                 <span class="wallet-icon">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="14" rx="3"/><path d="M16 13h2"/><path d="M2 10h20"/></svg>
@@ -1093,6 +1186,71 @@
     <!-- ================================================
          DEPOSIT/WITHDRAWAL MODAL
          ================================================ -->
+    <!-- ================= LEADERBOARD ================= -->
+    <div class="modal-overlay" id="leaderboardModal">
+        <div class="modal-container modal-wide">
+            <div class="modal-header">
+                <h2 class="modal-title">Leaderboard</h2>
+                <button class="modal-close" onclick="closeSocialModal('leaderboardModal')" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="seg-row">
+                    <div class="seg" id="lbPeriod">
+                        <button data-v="24h">24h</button><button data-v="7d" class="active">7 days</button><button data-v="30d">30 days</button><button data-v="all">All time</button>
+                    </div>
+                    <div class="seg" id="lbSort">
+                        <button data-v="pnl" class="active">P&amp;L</button><button data-v="volume">Volume</button><button data-v="bestWin">Biggest win</button>
+                    </div>
+                </div>
+                <div class="lb-wrap">
+                    <table class="lb-table">
+                        <thead><tr>
+                            <th>#</th><th>Player</th><th>P&amp;L</th><th>Wagered</th><th class="lb-hide-sm">Bets</th><th class="lb-hide-sm">Win rate</th><th>Best win</th>
+                        </tr></thead>
+                        <tbody id="lbBody"><tr><td colspan="7" class="lb-empty">Loading…</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="lb-foot" id="lbFoot">Real-money bets only, once settled. Updates every 30 seconds.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= AFFILIATE ================= -->
+    <div class="modal-overlay" id="affiliateModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 class="modal-title">Affiliate</h2>
+                <button class="modal-close" onclick="closeSocialModal('affiliateModal')" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body" id="affiliateBody"></div>
+        </div>
+    </div>
+
+    <!-- ================= SHAREABLE P&L CARD ================= -->
+    <div class="modal-overlay" id="pnlModal">
+        <div class="modal-container modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title">Share your P&amp;L</h2>
+                <button class="modal-close" onclick="closeSocialModal('pnlModal')" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="seg-row">
+                    <div class="seg" id="pnlPeriod">
+                        <button data-v="24h">24h</button><button data-v="7d" class="active">7 days</button><button data-v="30d">30 days</button><button data-v="all">All time</button>
+                    </div>
+                </div>
+                <div class="pnl-preview" id="pnlPreview">Generating…</div>
+                <div class="pnl-actions">
+                    <button class="aff-btn primary" onclick="pnlDownload()">Download</button>
+                    <button class="aff-btn" onclick="pnlCopy()">Copy image</button>
+                    <button class="aff-btn" id="pnlShareBtn" onclick="pnlShare()">Share…</button>
+                    <button class="aff-btn" onclick="pnlPostX()">Post on X</button>
+                </div>
+                <div class="aff-note">Your card carries your referral link — anyone who joins through it earns you 1% of what they wager.</div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="depositModal">
         <div class="modal-container">
             <div class="modal-header">
@@ -4324,6 +4482,7 @@
             }
             authServerSocket();
             await refreshAccount();
+            setTimeout(afterSignInReferral, 300); // a ?ref= link: link the referrer (one signature)
         }
 
         async function connectWallet(type) {
@@ -4370,6 +4529,7 @@
         function disconnectWallet(silent) {
             try { if (currentProvider && currentProvider.disconnect) currentProvider.disconnect(); } catch (e) { /* ignore */ }
             clearSession();
+            affiliateInfo = null;
             currentWallet = null;
             currentProvider = null;
             currentAddress = null;
@@ -4618,6 +4778,7 @@
                 listEl.innerHTML = items.map(item => {
                     const date = new Date(item.date);
                     const isDep = item.type === 'deposit';
+                    const label = isDep ? 'Deposit' : item.type === 'affiliate claim' ? 'Affiliate claim' : 'Withdrawal';
                     const amt = item.amount === null ? '—' : (isDep ? '+' : '-') + '$' + item.amount.toFixed(2);
                     const link = item.signature
                         ? `<a href="https://solscan.io/tx/${encodeURIComponent(item.signature)}" target="_blank" rel="noopener" style="color:#00d4ff;text-decoration:none;">view</a>`
@@ -4627,7 +4788,7 @@
                             <div class="history-item-left">
                                 <div class="history-item-icon ${isDep ? 'deposit' : 'withdrawal'}">${isDep ? '↓' : '↑'}</div>
                                 <div>
-                                    <div class="history-item-type">${isDep ? 'Deposit' : 'Withdrawal'} ${link}</div>
+                                    <div class="history-item-type">${label} ${link}</div>
                                     <div class="history-item-date">${escapeHtml(date.toLocaleDateString())} ${escapeHtml(date.toLocaleTimeString())}</div>
                                 </div>
                             </div>
@@ -4676,6 +4837,496 @@
             if (!e.target.closest('.asset-switcher')) closeAssetMenu();
         });
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAssetMenu(); });
+
+        // ================================================
+        // LEADERBOARD · AFFILIATE · SHAREABLE P&L CARD
+        // (affiliate flow adapted from perfect-nature's referral.js)
+        // ================================================
+        const SITE_URL = location.origin + location.pathname.replace(/index\.html$/, '');
+        const REF_KEY = 'btcgrid_pending_ref';
+        const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+        const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
+        const lsDel = (k) => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } };
+        let affiliateInfo = null;
+
+        // A ?ref=<code|wallet> link: remember it until a wallet signs in, and
+        // tidy it out of the address bar.
+        (function captureRef() {
+            try {
+                const u = new URL(location.href);
+                const ref = u.searchParams.get('ref');
+                if (!ref) return;
+                lsSet(REF_KEY, ref.trim().slice(0, 64));
+                u.searchParams.delete('ref');
+                history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+            } catch (e) { /* ignore */ }
+        })();
+
+        const refLink = (token) => SITE_URL + '?ref=' + encodeURIComponent(token);
+        const shortAddr = (w) => (w && w.length > 10 ? w.slice(0, 4) + '…' + w.slice(-4) : (w || ''));
+        function usd(v, signed) {
+            const n = Number(v) || 0;
+            const s = '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            if (signed) return (n > 0.004 ? '+' : n < -0.004 ? '−' : '') + s;
+            return (n < -0.004 ? '−' : '') + s;
+        }
+        const toneClass = (n) => (n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : '');
+
+        const SOCIAL_MODALS = ['leaderboardModal', 'affiliateModal', 'pnlModal'];
+        function openSocialModal(id) { document.getElementById(id).classList.add('show'); }
+        function closeSocialModal(id) { document.getElementById(id).classList.remove('show'); }
+        SOCIAL_MODALS.forEach((id) => {
+            document.getElementById(id).addEventListener('click', function (e) { if (e.target === this) closeSocialModal(id); });
+        });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') SOCIAL_MODALS.forEach(closeSocialModal); });
+
+        function segValue(id) { const b = document.querySelector('#' + id + ' button.active'); return b ? b.dataset.v : null; }
+        function wireSeg(id, onChange) {
+            document.getElementById(id).addEventListener('click', (e) => {
+                const b = e.target.closest('button');
+                if (!b) return;
+                document.querySelectorAll('#' + id + ' button').forEach((x) => x.classList.toggle('active', x === b));
+                onChange(b.dataset.v);
+            });
+        }
+
+        async function copyText(text, done) {
+            try { await navigator.clipboard.writeText(text); showToast(done || 'Copied', 'success'); }
+            catch (e) { window.prompt('Copy this:', text); }
+        }
+
+        // ---------------- Leaderboard ----------------
+        let lbTimer = null;
+        async function loadLeaderboard() {
+            const body = document.getElementById('lbBody');
+            try {
+                const r = await api(`/leaderboard?period=${segValue('lbPeriod')}&sort=${segValue('lbSort')}`);
+                if (!r.rows.length) {
+                    body.innerHTML = '<tr><td colspan="7" class="lb-empty">No settled real-money bets in this period yet — be the first.</td></tr>';
+                    return;
+                }
+                body.innerHTML = r.rows.map((row, i) => {
+                    const me = currentAddress && row.wallet === currentAddress;
+                    const best = row.bestWin > 0
+                        ? `${usd(row.bestWin, true)} <span style="color:var(--text-4)">${row.bestMult ? Number(row.bestMult).toFixed(2) + 'x' : ''}</span>`
+                        : '—';
+                    return `<tr class="${me ? 'me' : ''}">
+                        <td><span class="lb-rank ${i < 3 ? 'r' + (i + 1) : ''}">${i + 1}</span></td>
+                        <td title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}${me ? '<span class="lb-you">YOU</span>' : ''}</td>
+                        <td class="${toneClass(row.pnl)}">${usd(row.pnl, true)}</td>
+                        <td>${usd(row.volume)}</td>
+                        <td class="lb-hide-sm">${row.bets}</td>
+                        <td class="lb-hide-sm">${(row.winRate * 100).toFixed(0)}%</td>
+                        <td>${best}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                body.innerHTML = `<tr><td colspan="7" class="lb-empty">Couldn't load the leaderboard: ${escapeHtml(err.message)}</td></tr>`;
+            }
+        }
+        function openLeaderboard() {
+            openSocialModal('leaderboardModal');
+            loadLeaderboard();
+            clearInterval(lbTimer);
+            lbTimer = setInterval(() => {
+                if (document.getElementById('leaderboardModal').classList.contains('show')) loadLeaderboard();
+                else clearInterval(lbTimer);
+            }, 30000);
+        }
+        wireSeg('lbPeriod', loadLeaderboard);
+        wireSeg('lbSort', loadLeaderboard);
+
+        // ---------------- Affiliate ----------------
+        async function attachReferrer(ref) {
+            const authMessage = actionMessage('attach_referrer', { Ref: ref });
+            const authSignature = await signText(authMessage);
+            const r = await api('/affiliate/attach', { method: 'POST', body: { ref, authMessage, authSignature } });
+            lsDel(REF_KEY);
+            showToast('Referral linked', 'success');
+            return r;
+        }
+
+        // After sign-in: link the referrer from a ?ref= link (one signature).
+        async function afterSignInReferral() {
+            const ref = lsGet(REF_KEY);
+            if (!ref || !sessionToken) return;
+            try {
+                const info = await api('/affiliate');
+                affiliateInfo = info;
+                if (info.referredBy || ref === currentAddress || (info.code && info.code.toLowerCase() === ref.toLowerCase())) {
+                    lsDel(REF_KEY);
+                    return;
+                }
+                await attachReferrer(ref);
+            } catch (err) {
+                const m = (err && err.message) || '';
+                if (!/reject|cancel|denied/i.test(m)) { lsDel(REF_KEY); if (m) showToast(m, 'error'); }
+            }
+        }
+
+        function openAffiliate() {
+            openSocialModal('affiliateModal');
+            renderAffiliate();
+        }
+
+        async function renderAffiliate() {
+            const el = document.getElementById('affiliateBody');
+            if (!sessionToken) {
+                el.innerHTML = `
+                    <div class="aff-hero"><b>Earn 1% of everything your referrals wager</b>
+                        <p>Share your link. When a wallet that joined through it plays for real, 1% of every settled bet it places is credited to you — claimable in USDC to your wallet at any time. $10,000 wagered by your referrals = $100 for you.</p></div>
+                    <button class="wallet-connect-modal-btn" onclick="closeSocialModal('affiliateModal'); openDepositModal();">Connect wallet to get your link</button>`;
+                return;
+            }
+            el.innerHTML = '<div class="lb-empty">Loading…</div>';
+            let a;
+            try { a = await api('/affiliate'); } catch (err) { el.innerHTML = `<div class="lb-empty">${escapeHtml(err.message)}</div>`; return; }
+            affiliateInfo = a;
+            const pct = +(a.rate * 100).toFixed(2);
+            const canClaim = a.claimable >= 1;
+            el.innerHTML = `
+                <div class="aff-hero"><b>Earn ${pct}% of everything your referrals wager</b>
+                    <p>Paid by the house on every settled bet (won or lost) of wallets that joined with your link, claimable in USDC to this wallet. $10,000 wagered = $${(10000 * a.rate).toFixed(0)} for you.</p></div>
+                <div class="aff-label">Your referral link</div>
+                <div class="aff-row">
+                    <input class="modal-form-input" id="affLink" readonly value="${escapeHtml(refLink(a.refToken))}">
+                    <button class="aff-btn" onclick="copyText(document.getElementById('affLink').value, 'Link copied')">Copy</button>
+                </div>
+                ${a.code
+                    ? `<div class="aff-note">Your code: <b style="color:var(--text)">${escapeHtml(a.code)}</b> · locked</div>`
+                    : `<div class="aff-section">
+                        <div class="aff-label">Custom code <span style="color:var(--text-4)">(optional)</span></div>
+                        <div class="aff-row">
+                            <input class="modal-form-input" id="affCode" maxlength="20" placeholder="e.g. satoshi" autocomplete="off">
+                            <button class="aff-btn" onclick="setAffiliateCode()">Set code</button>
+                        </div>
+                        <div class="aff-note">3–20 letters or digits. Your link becomes …?ref=yourcode. It can't be changed later.</div>
+                    </div>`}
+                <div class="aff-stats">
+                    <div class="aff-stat"><div class="k">Referred wallets</div><div class="v">${a.referrals.total}${a.referrals.active ? ` <span style="font-size:11px;color:var(--text-3)">· ${a.referrals.active} played</span>` : ''}</div></div>
+                    <div class="aff-stat"><div class="k">Their volume</div><div class="v">${usd(a.referredVolume)}</div></div>
+                    <div class="aff-stat"><div class="k">Earned · all time</div><div class="v ${toneClass(a.earned)}">${usd(a.earned)}</div></div>
+                    <div class="aff-stat"><div class="k">Claimed</div><div class="v">${usd(a.claimed)}${a.claimPending ? ` <span style="font-size:11px;color:var(--text-3)">+${usd(a.claimPending)} sending</span>` : ''}</div></div>
+                </div>
+                <div class="aff-claim">
+                    <div><div class="aff-label" style="margin:0">Claimable now</div><div class="v">${usd(a.claimable)}</div></div>
+                    <button class="aff-btn primary" id="affClaimBtn" ${canClaim ? '' : 'disabled'} onclick="claimAffiliate()">${canClaim ? 'Claim to my wallet' : 'Min. $1 to claim'}</button>
+                </div>
+                <div class="aff-section">
+                    <div class="aff-label">Referred by</div>
+                    ${a.referredBy
+                        ? `<div class="aff-note" style="margin-top:0"><span style="color:var(--text);font-family:var(--mono)">${escapeHtml(shortAddr(a.referredBy))}</span> · linked permanently</div>`
+                        : `<div class="aff-row">
+                            <input class="modal-form-input" id="affRefInput" maxlength="64" placeholder="Have a referral code?" autocomplete="off" value="${escapeHtml(lsGet(REF_KEY) || '')}">
+                            <button class="aff-btn" onclick="applyReferralCode()">Apply</button>
+                        </div>
+                        <div class="aff-note">Optional and one time only — it can't be changed afterwards.</div>`}
+                </div>`;
+        }
+
+        async function setAffiliateCode() {
+            const code = (document.getElementById('affCode').value || '').trim();
+            if (!/^[a-zA-Z0-9]{3,20}$/.test(code)) return showToast('Code must be 3–20 letters or digits', 'error');
+            try {
+                const authMessage = actionMessage('set_referral_code', { Code: code });
+                const authSignature = await signText(authMessage);
+                await api('/affiliate/code', { method: 'POST', body: { code, authMessage, authSignature } });
+                showToast('Code set: ' + code, 'success');
+            } catch (err) {
+                if (!/reject|cancel|denied/i.test(err.message || '')) showToast(err.message, 'error');
+            }
+            renderAffiliate();
+        }
+
+        async function applyReferralCode() {
+            const ref = (document.getElementById('affRefInput').value || '').trim();
+            if (!ref) return;
+            try { await attachReferrer(ref); }
+            catch (err) { if (!/reject|cancel|denied/i.test(err.message || '')) showToast(err.message, 'error'); }
+            renderAffiliate();
+        }
+
+        async function claimAffiliate() {
+            const a = affiliateInfo;
+            if (!a || !(a.claimable >= 1)) return;
+            const btn = document.getElementById('affClaimBtn');
+            const amount = a.claimable;
+            try {
+                btn.disabled = true;
+                btn.textContent = 'Sign to confirm…';
+                const authMessage = actionMessage('claim_affiliate', { Amount: amount.toFixed(2) });
+                const authSignature = await signText(authMessage);
+                btn.textContent = 'Sending USDC…';
+                const r = await api('/affiliate/claim', { method: 'POST', body: { amount, authMessage, authSignature } });
+                showToast('Claimed ' + usd(r.amount) + ' USDC to your wallet', 'success');
+                checkWalletTokenBalance();
+            } catch (err) {
+                if (!/reject|cancel|denied/i.test(err.message || '')) showToast('Claim failed: ' + err.message, 'error');
+            }
+            renderAffiliate();
+        }
+
+        // ---------------- Shareable P&L card ----------------
+        const PERIOD_LABEL = { '24h': 'Last 24 hours', '7d': 'Last 7 days', '30d': 'Last 30 days', all: 'All time' };
+        let pnlCanvas = null, pnlStats = null;
+
+        function openPnlCard() {
+            if (!sessionToken) {
+                showToast('Connect your wallet to share your real-money P&L', 'info');
+                openDepositModal();
+                return;
+            }
+            openSocialModal('pnlModal');
+            renderPnlCard();
+        }
+        wireSeg('pnlPeriod', () => renderPnlCard());
+
+        async function renderPnlCard() {
+            const box = document.getElementById('pnlPreview');
+            box.textContent = 'Generating…';
+            try {
+                const [stats, aff] = await Promise.all([
+                    api('/me/stats?period=' + segValue('pnlPeriod')),
+                    affiliateInfo ? Promise.resolve(affiliateInfo) : api('/affiliate').catch(() => null),
+                ]);
+                if (aff) affiliateInfo = aff;
+                pnlStats = stats;
+                pnlCanvas = await drawPnlCard(stats, (aff && aff.refToken) || currentAddress);
+                box.innerHTML = '';
+                box.appendChild(pnlCanvas);
+            } catch (err) {
+                box.textContent = "Couldn't build the card: " + err.message;
+            }
+        }
+
+        function cardRoundRect(g, x, y, w, h, r) {
+            g.beginPath();
+            if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h);
+        }
+        function cardFitFont(g, text, family, weight, startPx, minPx, maxWidth) {
+            let px = startPx;
+            do { g.font = `${weight} ${px}px ${family}`; if (g.measureText(text).width <= maxWidth) break; px -= 2; } while (px > minPx);
+        }
+
+        // 1200x675 (the size X / Telegram / Discord previews use), in the app's
+        // own style: black grid, white price-style line, green/red P&L.
+        async function drawPnlCard(s, refToken) {
+            try {
+                await Promise.all([document.fonts.load('700 96px "JetBrains Mono"'), document.fonts.load('600 26px Inter'), document.fonts.load('500 18px "JetBrains Mono"')]);
+            } catch (e) { /* system fonts */ }
+            const W = 1200, H = 675;
+            const MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
+            const SANS = 'Inter, -apple-system, "Segoe UI", sans-serif';
+            const c = document.createElement('canvas');
+            c.width = W; c.height = H;
+            const g = c.getContext('2d');
+            const tone = s.pnl > 0.004 ? '#4ade80' : s.pnl < -0.004 ? '#f87171' : '#fafafa';
+            const toneRgb = s.pnl > 0.004 ? '74, 222, 128' : s.pnl < -0.004 ? '248, 113, 113' : '250, 250, 250';
+
+            // background: the game's dark grid with a soft glow in the P&L colour
+            g.fillStyle = '#0a0a0b';
+            g.fillRect(0, 0, W, H);
+            g.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+            g.lineWidth = 1;
+            g.beginPath();
+            for (let x = 0.5; x < W; x += 60) { g.moveTo(x, 0); g.lineTo(x, H); }
+            for (let y = 0.5; y < H; y += 45) { g.moveTo(0, y); g.lineTo(W, y); }
+            g.stroke();
+            const glow = g.createRadialGradient(300, 300, 10, 300, 300, 560);
+            glow.addColorStop(0, `rgba(${toneRgb}, 0.10)`);
+            glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            g.fillStyle = glow;
+            g.fillRect(0, 0, W, H);
+            g.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+            cardRoundRect(g, 18.5, 18.5, W - 37, H - 37, 22);
+            g.stroke();
+
+            // brand
+            cardRoundRect(g, 60, 56, 44, 44, 11);
+            g.fillStyle = '#fafafa';
+            g.fill();
+            g.fillStyle = '#0a0a0b';
+            g.font = `700 24px ${SANS}`;
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('₿', 82, 79);
+            g.textAlign = 'left';
+            g.fillStyle = '#fafafa';
+            g.font = `600 26px ${SANS}`;
+            g.fillText('Grid', 118, 70);
+            g.fillStyle = '#71717a';
+            g.font = `500 15px ${MONO}`;
+            g.fillText('BTC/USDT · 10s × $10 grid', 118, 94);
+
+            // period + rank pills, top right
+            let px = W - 60;
+            const pill = (text, fg, bg) => {
+                g.font = `600 14px ${SANS}`;
+                const w = g.measureText(text).width + 30;
+                px -= w;
+                cardRoundRect(g, px, 61, w, 34, 17);
+                g.fillStyle = bg;
+                g.fill();
+                g.fillStyle = fg;
+                g.textAlign = 'center';
+                g.fillText(text, px + w / 2, 78);
+                g.textAlign = 'left';
+                px -= 10;
+            };
+            pill((PERIOD_LABEL[s.period] || '').toUpperCase(), '#d4d4d8', 'rgba(255, 255, 255, 0.07)');
+            if (s.rank && s.bets) {
+                const top = s.rank <= 3;
+                pill(`#${s.rank} OF ${s.players} PLAYERS`, top ? '#facc15' : '#fafafa', top ? 'rgba(250, 204, 21, 0.14)' : 'rgba(255, 255, 255, 0.07)');
+            }
+
+            // the number
+            g.textBaseline = 'alphabetic';
+            g.fillStyle = '#a1a1aa';
+            g.font = `500 20px ${SANS}`;
+            g.fillText('Profit & loss', 60, 210);
+            const big = usd(s.pnl, true);
+            cardFitFont(g, big, MONO, 700, 104, 40, 545);
+            g.fillStyle = tone;
+            g.fillText(big, 56, 305);
+            g.font = `500 19px ${MONO}`;
+            g.fillStyle = '#a1a1aa';
+            const roi = s.volume > 0 ? (s.pnl / s.volume) * 100 : 0;
+            g.fillText(s.volume > 0
+                ? `${roi > 0.05 ? '+' : roi < -0.05 ? '−' : ''}${Math.abs(roi).toFixed(1)}% on ${usd(s.volume)} wagered`
+                : 'No settled bets in this period yet', 60, 348);
+
+            // stats row
+            const cells = [
+                ['Bets', String(s.bets)],
+                ['Win rate', s.bets ? (s.winRate * 100).toFixed(0) + '%' : '—'],
+                ['Best win', s.bestWin > 0 ? usd(s.bestWin, true) : '—'],
+                ['Best hit', s.bestMult ? Number(s.bestMult).toFixed(2) + 'x' : '—'],
+            ];
+            cells.forEach(([k, v], i) => {
+                const x = 60 + i * 140;
+                g.fillStyle = '#71717a';
+                g.font = `600 12px ${SANS}`;
+                g.fillText(k.toUpperCase(), x, 414);
+                g.fillStyle = '#fafafa';
+                cardFitFont(g, v, MONO, 600, 24, 14, 128);
+                g.fillText(v, x, 446);
+            });
+
+            // cumulative P&L curve (equal spacing per settled bet)
+            const cx = 650, cy = 135, cw = 490, ch = 340;
+            cardRoundRect(g, cx, cy, cw, ch, 16);
+            g.fillStyle = 'rgba(255, 255, 255, 0.022)';
+            g.fill();
+            g.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+            g.stroke();
+            g.fillStyle = '#71717a';
+            g.font = `600 12px ${SANS}`;
+            g.fillText('CUMULATIVE P&L', cx + 20, cy + 30);
+            const vals = [0, ...((s.series || []).map((p) => p[1]))];
+            if (vals.length < 2) {
+                g.textAlign = 'center';
+                g.fillStyle = '#52525b';
+                g.font = `500 16px ${SANS}`;
+                g.fillText('Your curve appears after your first settled bet', cx + cw / 2, cy + ch / 2 + 8);
+                g.textAlign = 'left';
+            } else {
+                const ix = cx + 22, iy = cy + 52, iw = cw - 44, ih = ch - 74;
+                let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+                if (hi - lo < 1) { hi += 0.5; lo -= 0.5; }
+                const X = (i) => ix + (i / (vals.length - 1)) * iw;
+                const Y = (v) => iy + ((hi - v) / (hi - lo)) * ih;
+                // zero line
+                g.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+                g.setLineDash([5, 6]);
+                g.beginPath(); g.moveTo(ix, Y(0) + 0.5); g.lineTo(ix + iw, Y(0) + 0.5); g.stroke();
+                g.setLineDash([]);
+                // area
+                const grad = g.createLinearGradient(0, iy, 0, iy + ih);
+                grad.addColorStop(0, `rgba(${toneRgb}, 0.22)`);
+                grad.addColorStop(1, `rgba(${toneRgb}, 0.0)`);
+                g.beginPath();
+                g.moveTo(X(0), Y(0));
+                vals.forEach((v, i) => g.lineTo(X(i), Y(v)));
+                g.lineTo(X(vals.length - 1), Y(0));
+                g.closePath();
+                g.fillStyle = grad;
+                g.fill();
+                // line
+                g.save();
+                g.shadowColor = `rgba(${toneRgb}, 0.6)`;
+                g.shadowBlur = 14;
+                g.strokeStyle = tone;
+                g.lineWidth = 3;
+                g.lineJoin = 'round';
+                g.beginPath();
+                vals.forEach((v, i) => (i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))));
+                g.stroke();
+                g.restore();
+                const ex = X(vals.length - 1), ey = Y(vals[vals.length - 1]);
+                g.beginPath(); g.arc(ex, ey, 7, 0, Math.PI * 2); g.fillStyle = `rgba(${toneRgb}, 0.25)`; g.fill();
+                g.beginPath(); g.arc(ex, ey, 4, 0, Math.PI * 2); g.fillStyle = '#fafafa'; g.fill();
+            }
+
+            // footer: referral link + wallet/date
+            g.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            g.beginPath(); g.moveTo(60, 525.5); g.lineTo(W - 60, 525.5); g.stroke();
+            g.fillStyle = '#a1a1aa';
+            g.font = `500 15px ${SANS}`;
+            g.fillText('Play with my link', 60, 566);
+            const link = refLink(refToken).replace(/^https?:\/\//, '');
+            cardFitFont(g, link, MONO, 600, 22, 12, 820);
+            g.fillStyle = '#fafafa';
+            g.fillText(link, 60, 598);
+            g.textAlign = 'right';
+            g.fillStyle = '#71717a';
+            g.font = `500 15px ${MONO}`;
+            g.fillText(shortAddr(currentAddress), W - 60, 566);
+            g.fillText(new Date().toISOString().slice(0, 10), W - 60, 596);
+            g.textAlign = 'left';
+            return c;
+        }
+
+        function pnlShareText() {
+            const s = pnlStats || { pnl: 0, period: '7d' };
+            const link = refLink((affiliateInfo && affiliateInfo.refToken) || currentAddress);
+            return `${usd(s.pnl, true)} on BTC Grid · ${PERIOD_LABEL[s.period] || ''}\nPlay the 10s × $10 BTC grid with my link: ${link}`;
+        }
+        function pnlBlob() { return new Promise((resolve) => pnlCanvas.toBlob(resolve, 'image/png')); }
+        function pnlDownload() {
+            if (!pnlCanvas) return;
+            const a = document.createElement('a');
+            a.download = `btc-grid-pnl-${(pnlStats && pnlStats.period) || ''}.png`;
+            a.href = pnlCanvas.toDataURL('image/png');
+            a.click();
+        }
+        async function pnlCopy() {
+            if (!pnlCanvas) return;
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': await pnlBlob() })]);
+                showToast('Card copied — paste it anywhere', 'success');
+            } catch (e) {
+                showToast("This browser can't copy images — use Download instead", 'warning');
+            }
+        }
+        async function pnlShare() {
+            if (!pnlCanvas) return;
+            try {
+                const file = new File([await pnlBlob()], 'btc-grid-pnl.png', { type: 'image/png' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], text: pnlShareText() });
+                    return;
+                }
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+            }
+            copyText(pnlShareText(), 'Sharing isn’t available here — text + link copied instead');
+        }
+        function pnlPostX() {
+            if (!pnlCanvas) return;
+            pnlDownload(); // X can't take an image from a link — attach the downloaded card
+            window.open('https://x.com/intent/post?text=' + encodeURIComponent(pnlShareText()), '_blank', 'noopener');
+            showToast('Card downloaded — attach it to your post', 'info');
+        }
 
         tryEagerConnect();
     </script>

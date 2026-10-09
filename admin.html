@@ -163,6 +163,7 @@
                 <select id="wdKind" onchange="loadWithdrawals()">
                     <option value="">Players and house</option>
                     <option value="player">Players</option>
+                    <option value="affiliate">Affiliate claims</option>
                     <option value="house">House profit</option>
                 </select>
             </div>
@@ -282,12 +283,13 @@
         const L = status.ledger;
         const stats = [
             ['Vault USDC (on-chain)', money(status.onChain.usdc)],
-            ['Owed (players + stakes + house)', money(status.owed)],
+            ['Owed (players + stakes + affiliates + house)', money(status.owed)],
             ['Solvent', status.solvent ? '<span class="ok">YES</span>' : '<span class="bad">NO — investigate</span>'],
             ['Vault SOL (fees)', status.onChain.sol === null ? '—' : status.onChain.sol.toFixed(4) + (status.onChain.sol < 0.01 ? ' <span class="warn">low</span>' : '')],
             ['Player balances', money(L.player)],
             ['Open stakes (escrow)', money(L.escrow)],
             ['House bankroll', money(L.house)],
+            ['Affiliate earnings owed', money(L.affiliate)],
             ['Open exposure', money(status.exposure)],
             ['Feed', esc(status.feed.source) + (status.feed.live ? ' <span class="ok">live</span>' : ' <span class="bad">down</span>')],
             ['House edge', Math.round(status.config.houseEdge * 100) + '%'],
@@ -477,7 +479,7 @@
                 <td class="num muted">${w.id}</td>
                 <td>${when(w.createdAt)}</td>
                 <td class="wallet"><a href="#" data-wallet="${esc(w.wallet)}" onclick="showPlayer(this.dataset.wallet); return false" title="${esc(w.wallet)}">${esc(short(w.wallet))}</a></td>
-                <td>${w.kind === 'house' ? 'house profit' : 'player'}</td>
+                <td>${w.kind === 'house' ? 'house profit' : w.kind === 'affiliate' ? 'affiliate claim' : 'player'}</td>
                 <td class="num">${money(w.amount)}</td>
                 <td>${st[w.status] || esc(w.status)}</td>
                 <td>${w.signature ? `<a href="${scan('tx', w.signature)}" target="_blank" rel="noopener">${esc(w.signature.slice(0, 10))}…</a>` : '—'}</td>

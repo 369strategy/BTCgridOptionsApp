@@ -11,6 +11,8 @@ const deposits = require('./deposits');
 const withdrawals = require('./withdrawals');
 const auth = require('./auth');
 const admin = require('./admin');
+const referral = require('./referral');
+const leaderboard = require('./leaderboard');
 
 const router = express.Router();
 
@@ -134,6 +136,54 @@ router.post('/withdraw',
     res.json({ ok: true, ...r });
   }));
 
+// ---------------------------------------------------------------------------
+// Leaderboard (public) and the signed-in player's own stats (P&L card)
+// ---------------------------------------------------------------------------
+router.get('/leaderboard', byIp(60), wrap(async (req, res) => {
+  res.json(await leaderboard.leaderboard({ period: req.query.period, sort: req.query.sort }));
+}));
+
+router.get('/me/stats', auth.requireSession, byWallet(60), wrap(async (req, res) => {
+  res.json(await leaderboard.stats(req.wallet, req.query.period));
+}));
+
+// ---------------------------------------------------------------------------
+// Affiliate: 1% of referred wallets' settled volume, claimable in USDC
+// ---------------------------------------------------------------------------
+router.get('/affiliate', auth.requireSession, wrap(async (req, res) => {
+  res.json(await referral.info(req.wallet));
+}));
+
+// Lock this wallet's vanity code (permanent). Signed + bound to the code.
+router.post('/affiliate/code',
+  auth.requireSession, byWallet(10),
+  auth.requireSignedAction('set_referral_code', (req, msg) => auth.hasLine(msg, 'Code', String(req.body.code))),
+  wrap(async (req, res) => {
+    const r = await referral.setCode({ wallet: req.wallet, code: req.body.code });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    res.json({ ok: true, code: r.code });
+  }));
+
+// Attach a referrer (permanent). Signed + bound to the ref, so nobody can claim
+// another wallet's referral slot.
+router.post('/affiliate/attach',
+  auth.requireSession, byWallet(10),
+  auth.requireSignedAction('attach_referrer', (req, msg) => auth.hasLine(msg, 'Ref', String(req.body.ref))),
+  wrap(async (req, res) => {
+    const r = await referral.attachReferrer({ wallet: req.wallet, ref: req.body.ref });
+    if (!r.ok) return res.status(400).json({ error: r.reason });
+    res.json({ ok: true, referrer: r.referrer });
+  }));
+
+// Claim affiliate earnings to this (the referrer's own) wallet.
+router.post('/affiliate/claim',
+  auth.requireSession, byWallet(6),
+  auth.requireSignedAction('claim_affiliate', (req, msg) => auth.hasLine(msg, 'Amount', Number(req.body.amount).toFixed(2))),
+  wrap(async (req, res) => {
+    const r = await withdrawals.withdraw({ wallet: req.wallet, amount: req.body.amount, kind: 'affiliate' });
+    res.json({ ok: true, ...r });
+  }));
+
 router.get('/history', auth.requireSession, wrap(async (req, res) => {
   const items = [...await deposits.historyFor(req.wallet), ...await withdrawals.historyFor(req.wallet)]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -155,13 +205,14 @@ router.get('/admin/status', auth.requireSession, auth.requireAdmin, wrap(async (
     vault ? solana.usdcBalanceOf(vault) : 0,
     vault ? solana.solBalanceOf(vault).catch(() => null) : null,
   ]);
-  const owed = (totals.player || 0) + (totals.escrow || 0) + (totals.house || 0);
+  const owed = (totals.player || 0) + (totals.escrow || 0) + (totals.house || 0) + (totals.affiliate || 0);
   res.json({
     vaultAddress: vault ? vault.toString() : null,
     cluster: config.CLUSTER,
     onChain: { usdc: chainUsdc, sol: chainSol },
     ledger: totals,
-    // USDC the vault must hold for players + open stakes + bankroll. On-chain
+    // USDC the vault must hold for players + open stakes + affiliate earnings +
+    // bankroll. On-chain
     // should be >= this (a small surplus is fine: rounding, uncredited sends).
     owed,
     solvent: chainUsdc + 1e-6 >= owed,

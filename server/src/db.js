@@ -122,6 +122,29 @@ const HeldDeposit = sequelize.define('HeldDeposit', {
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'held' }, // held|credited
 }, { tableName: 'held_deposits', indexes: [{ fields: ['status'] }] });
 
+// Affiliate identity, one row per wallet that touched the referral system.
+//   code/codeLower  the wallet's own vanity code (set once, then permanent;
+//                   codeLower is the case-insensitive unique key)
+//   referrerWallet  who referred this wallet (set once, permanent, never itself)
+//   referredAt      when it was attached — only bets placed after it earn
+//                   the referrer anything (forward-only)
+const Referral = sequelize.define('Referral', {
+  wallet: { type: DataTypes.STRING, primaryKey: true },
+  code: { type: DataTypes.STRING, unique: true },
+  codeLower: { type: DataTypes.STRING, unique: true },
+  referrerWallet: { type: DataTypes.STRING },
+  referredAt: { type: DataTypes.DATE },
+}, { tableName: 'referrals', indexes: [{ fields: ['referrerWallet'] }] });
+
+// One row per settled bet that paid a referrer (betId unique = paid once).
+const AffiliateCommission = sequelize.define('AffiliateCommission', {
+  betId: { type: DataTypes.INTEGER, primaryKey: true },
+  referrer: { type: DataTypes.STRING, allowNull: false },
+  referee: { type: DataTypes.STRING, allowNull: false },
+  volume: { type: MONEY, allowNull: false },   // the stake
+  amount: { type: MONEY, allowNull: false },   // the referrer's cut
+}, { tableName: 'affiliate_commissions', updatedAt: false, indexes: [{ fields: ['referrer'] }, { fields: ['referee'] }] });
+
 // Signed messages (login, withdraw, admin changes) are single-use: a signature
 // that was already accepted can't be sent again, even inside its 5-minute window.
 const UsedSignature = sequelize.define('UsedSignature', {
@@ -152,4 +175,5 @@ async function init() {
 module.exports = {
   sequelize, init,
   LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player, UsedSignature, HeldDeposit,
+  Referral, AffiliateCommission,
 };

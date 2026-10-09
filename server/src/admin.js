@@ -133,7 +133,7 @@ async function heldDepositsReport() {
 async function withdrawalsReport({ status, wallet, kind, before, limit } = {}) {
   const where = {};
   if (status && ['sending', 'completed', 'failed', 'review'].includes(status)) where.status = status;
-  if (kind && ['player', 'house'].includes(kind)) where.kind = kind;
+  if (kind && ['player', 'affiliate', 'house'].includes(kind)) where.kind = kind;
   if (wallet) where.wallet = String(wallet);
   if (Number(before) > 0) where.id = { [Op.lt]: Number(before) };
   const n = Math.max(1, Math.min(500, Number(limit) || 200));

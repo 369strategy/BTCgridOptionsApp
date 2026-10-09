@@ -26,6 +26,7 @@ const ledger = require('../src/ledger');
 const API = process.env.API || 'http://localhost:3000';
 const player = Keypair.generate();
 const admin = Keypair.fromSecretKey(bs58.decode(process.env.ADMIN_KEY));
+const A_WALLET = admin.publicKey.toBase58();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let passed = 0;
@@ -157,6 +158,29 @@ function nextGrid() {
   ok(/Invalid cell/.test(reasons), 'malformed cell refused');
   ok(/Stake must be/.test(reasons), 'out-of-range stake refused');
 
+  console.log('\naffiliate');
+  const referrer = Keypair.generate();
+  const R = referrer.publicKey.toBase58();
+  const rt = await login(referrer);
+  const code = 'st' + Date.now().toString(36).slice(-7);
+  const setCode = await api('/affiliate/code', { method: 'POST', token: rt, body: { code, ...signedAction(referrer, 'set_referral_code', { Code: code }) } });
+  ok(setCode.status === 200 && setCode.body.code === code, `referrer locks its code "${code}"`);
+  const other = Keypair.generate();
+  const ot = await login(other);
+  const dupCode = await api('/affiliate/code', { method: 'POST', token: ot, body: { code: code.toUpperCase(), ...signedAction(other, 'set_referral_code', { Code: code.toUpperCase() }) } });
+  ok(dupCode.status === 400 && /taken/.test(dupCode.body.error), 'the same code in other letter case is taken');
+  const again = await api('/affiliate/code', { method: 'POST', token: rt, body: { code: code + 'x', ...signedAction(referrer, 'set_referral_code', { Code: code + 'x' }) } });
+  ok(again.status === 400 && /cannot be changed/.test(again.body.error), 'a locked code cannot be changed');
+  const noSig = await api('/affiliate/attach', { method: 'POST', token: pt, body: { ref: code } });
+  ok(noSig.status === 401, 'attaching a referrer needs a fresh signature');
+  const self = await api('/affiliate/attach', { method: 'POST', token: pt, body: { ref: P, ...signedAction(player, 'attach_referrer', { Ref: P }) } });
+  ok(self.status === 400 && /yourself/.test(self.body.error), 'a wallet cannot refer itself');
+  const attach = await api('/affiliate/attach', { method: 'POST', token: pt, body: { ref: code, ...signedAction(player, 'attach_referrer', { Ref: code }) } });
+  ok(attach.status === 200 && attach.body.referrer === R, 'player links the referrer through its code');
+  const attach2 = await api('/affiliate/attach', { method: 'POST', token: pt, body: { ref: A_WALLET, ...signedAction(player, 'attach_referrer', { Ref: A_WALLET }) } });
+  ok(attach2.status === 400 && /already have/.test(attach2.body.error), 'the referrer is permanent (a second one is refused)');
+
+  console.log('\nbets');
   const lowerSeen = Math.max(1.01, Math.floor(later.m * 0.9 * 100) / 100);
   const t2 = Date.now();
   const r2 = await api('/bets', { method: 'POST', token: pt, body: { bets: [
@@ -202,6 +226,32 @@ function nextGrid() {
   const expected = 460 + hist.reduce((s, b) => s + (b.status === 'won' ? b.payout : b.status === 'void' ? b.amount : 0), 0);
   const me2 = (await api('/me', { token: pt })).body.account;
   ok(Math.abs(me2.balance - expected) < 1e-6 && me2.inPlay === 0, `balance after settlement $${me2.balance} = expected $${expected.toFixed(2)}`);
+
+  // the referrer earned 1% of the player's settled (won/lost) stakes
+  const settledStake = hist.filter(b => b.status === 'won' || b.status === 'lost').reduce((x, b) => x + b.amount, 0);
+  const aff = await api('/affiliate', { token: rt });
+  const want = Math.floor(settledStake * 0.01 * 100 + 1e-9) / 100;
+  ok(aff.status === 200 && aff.body.referrals.total === 1 && Math.abs(aff.body.referredVolume - settledStake) < 0.005
+    && Math.abs(aff.body.earned - settledStake * 0.01) < 0.005 && Math.abs(aff.body.claimable - want) < 0.005,
+    `referrer earned 1% of $${settledStake} referred volume: $${aff.body.earned} (claimable $${aff.body.claimable})`);
+  const myAff = await api('/affiliate', { token: pt });
+  ok(myAff.body.referredBy === R && myAff.body.claimable === 0, 'player sees who referred it and earns nothing itself');
+  const claimAmt = Math.max(aff.body.claimable, 0.01);
+  const claim = await api('/affiliate/claim', { method: 'POST', token: rt, body: { amount: claimAmt, ...signedAction(referrer, 'claim_affiliate', { Amount: claimAmt.toFixed(2) }) } });
+  ok(claim.status >= 400 && (await api('/affiliate', { token: rt })).body.claimable === aff.body.claimable,
+    `a claim that can't be paid leaves the earnings untouched ("${claim.body.error}")`);
+  const steal = await api('/affiliate/claim', { method: 'POST', token: pt, body: { amount: 1, ...signedAction(player, 'claim_affiliate', { Amount: '1.00' }) } });
+  ok(steal.status === 400 && /claimable/.test(steal.body.error), `the referred player cannot claim the referrer's earnings ("${steal.body.error}")`);
+
+  console.log('\nleaderboard + P&L card stats');
+  const lb = await api('/leaderboard?period=24h&sort=volume');
+  const lbRow = lb.body.rows.find(r => r.wallet === P);
+  ok(lb.status === 200 && lbRow && Math.abs(lbRow.volume - settledStake) < 0.005 && Math.abs(lbRow.pnl - me2.pnl) < 0.005,
+    `leaderboard (24h, by volume) has the player: volume $${lbRow && lbRow.volume}, P&L ${lbRow && lbRow.pnl}`);
+  const stats = await api('/me/stats?period=24h', { token: pt });
+  ok(stats.status === 200 && Math.abs(stats.body.pnl - me2.pnl) < 0.005 && stats.body.series.length >= 1
+    && Math.abs(stats.body.series[stats.body.series.length - 1][1] - me2.pnl) < 0.005 && stats.body.rank >= 1,
+    `P&L card stats: P&L ${stats.body.pnl}, ${stats.body.bets} bets, rank #${stats.body.rank} of ${stats.body.players}, curve ends at ${stats.body.series.length ? stats.body.series[stats.body.series.length - 1][1] : '—'}`);
 
   console.log('\nwithdrawals');
   const sigWrongAmt = signedAction(player, 'withdraw', { Amount: '1.00' });

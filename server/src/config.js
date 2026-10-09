@@ -85,6 +85,11 @@ const GAME = {
   QUOTE_MAX_PRICE_DRIFT: 2,
 
   // Stakes
+  // Affiliates: a referrer earns this share of every settled (won or lost)
+  // stake its referred wallets place, paid by the house, claimable in USDC to
+  // the referrer's wallet. 0.01 = $100 per $10,000 wagered.
+  AFFILIATE_SHARE: Number(process.env.AFFILIATE_SHARE || 0.01),
+
   MIN_BET: 1,
   MAX_BET: Number(process.env.MAX_BET || 100), // real-money stake cap (page reads it from /ws hello)
   MAX_CELLS_PER_REQUEST: 40,
