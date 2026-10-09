@@ -1060,7 +1060,7 @@
                             <button class="pan-btn" onclick="panView(0, PAN_STEP_MS)" title="Look back in time (← or shift+scroll)" aria-label="Look back in time">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
                             </button>
-                            <button class="pan-btn" onclick="panView(0, -PAN_STEP_MS)" title="Toward now (→)" aria-label="Toward now">
+                            <button class="pan-btn" onclick="panView(0, -PAN_STEP_MS)" title="Later (→)" aria-label="Look later">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                             </button>
                             <button class="recenter-btn" id="recenterBtn" onclick="recenterView()" title="Back to live (C)">Recenter</button>
@@ -1393,13 +1393,16 @@
 
         // Chart panning: look around, but not too far.
         let viewPanRows = 0;              // + = looking higher
-        let viewPanMs = 0;                // + = looking further back in time
+        let viewPanMs = 0;                // + = looking further back in time, - = ahead
         const PAN_MAX_ROWS = 5;           // up/down, all still priced
         const PAN_MAX_PAST_MS = 60000;    // up to a minute of extra history
         const PAN_STEP_MS = 5000;
+        // On smaller charts fewer columns fit (see chartZoom); the columns that
+        // no longer fit on the right can be reached by panning forward this far.
+        let viewMaxAheadMs = 0;
         function panView(dRows, dMs) {
             viewPanRows = Math.max(-PAN_MAX_ROWS, Math.min(PAN_MAX_ROWS, viewPanRows + dRows));
-            viewPanMs = Math.max(0, Math.min(PAN_MAX_PAST_MS, viewPanMs + dMs));
+            viewPanMs = Math.max(-viewMaxAheadMs, Math.min(PAN_MAX_PAST_MS, viewPanMs + dMs));
             updatePanUi();
         }
         function recenterView() {
@@ -2591,6 +2594,28 @@
             else ctx.rect(x, y, w, h);
         }
 
+        // Zoom for smaller charts. A big chart shows 15 columns (30s back, 2 min
+        // ahead) and 16 rows; when the cells would get smaller than about
+        // CELL_MIN_W x CELL_MIN_H, fewer columns/rows are shown so each cell
+        // stays readable (the rest is reachable by panning). Multiplier text is
+        // sized from the cell, never larger than on a big screen.
+        const CELL_MIN_W = 60, CELL_MIN_H = 34;
+        function chartZoom(chartWidth, chartHeight) {
+            const cols = Math.max(8, Math.min(15, Math.floor(chartWidth / CELL_MIN_W)));
+            const rows = Math.max(9, Math.min(16, Math.floor(chartHeight / CELL_MIN_H)));
+            const pastMs = cols >= 14 ? 30000 : cols >= 10 ? 20000 : 15000;
+            const futureMs = cols * 10000 - pastMs;
+            const cellW = chartWidth / cols, cellH = chartHeight / rows;
+            // 11px on a big chart; zoomed in, a little smaller and sized to the cell
+            const zoomed = cols < 15 || rows < 16;
+            const font = zoomed ? Math.max(8.5, Math.min(10, cellW * 0.155, cellH * 0.3)) : 11;
+            return {
+                cols, rows, pastMs, futureMs, font,
+                // last simulated column ends ~130s ahead
+                maxAheadMs: cols < 15 ? Math.max(0, 130000 - futureMs) : 0,
+            };
+        }
+
         function drawChart() {
             const rect = canvas.getBoundingClientRect();
             const width = rect.width;
@@ -2598,6 +2623,11 @@
             const padding = {top: 14, right: 78, bottom: 28, left: 12};
             const chartWidth = width - padding.left - padding.right;
             const chartHeight = height - padding.top - padding.bottom;
+            const zoom = chartZoom(chartWidth, chartHeight);
+            viewMaxAheadMs = zoom.maxAheadMs;
+            if (viewPanMs < -viewMaxAheadMs) { viewPanMs = -viewMaxAheadMs; updatePanUi(); }
+            const fs = zoom.font;                 // multiplier text size (px)
+            const fsScale = fs / 11;              // 1 on a big screen
 
             // Clear
             ctx.clearRect(0, 0, width, height);
@@ -2609,18 +2639,18 @@
             const msPerCell = 10000; // 10 seconds per cell
             const now = serverNow();
 
-            // Time range: 30s past to 2 min future (all simulated columns),
-            // shifted back when the user pans into history.
-            const pastRange = 30000 + viewPanMs;
-            const futureRange = 120000 - viewPanMs;
+            // Time range: 30s past to 2 min future on a big chart (fewer
+            // columns on a smaller one), shifted when the user pans.
+            const pastRange = zoom.pastMs + viewPanMs;
+            const futureRange = zoom.futureMs - viewPanMs;
             const timeStart = now - pastRange;
             const timeEnd = now + futureRange;
 
-            // Price range: 15 rows around the smoothed game price, shifted when
-            // the user pans up/down.
+            // Price range: 16 rows around the smoothed game price on a big chart
+            // (fewer on a smaller one), shifted when the user pans up/down.
             const livePrice = displayPrice || price || 97000;
             const centerPrice = livePrice + viewPanRows * pricePerCell;
-            const totalPriceRange = 160;
+            const totalPriceRange = zoom.rows * pricePerCell;
             const minPrice = centerPrice - totalPriceRange / 2;
             const maxPrice = centerPrice + totalPriceRange / 2;
 
@@ -2875,29 +2905,30 @@
                     cellCenterY < padding.top || cellCenterY > bottom) continue;
 
 
+                // text sizes follow the cell size (fs = 11px on a big chart)
                 if (isClosingSoon) {
-                    ctx.font = `500 11px ${CHART_MONO}`;
+                    ctx.font = `500 ${fs}px ${CHART_MONO}`;
                     ctx.fillStyle = `rgba(161, 161, 170, ${baseOpacity * 0.55 + 0.08})`;
-                    ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 5);
-                    ctx.font = `500 9px ${CHART_MONO}`;
+                    ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 5 * fsScale);
+                    ctx.font = `500 ${Math.max(7.5, fs - 2)}px ${CHART_MONO}`;
                     ctx.fillStyle = `rgba(161, 161, 170, ${baseOpacity * 0.6 + 0.1})`;
-                    ctx.fillText(`${Math.ceil(timeUntilStart / 1000)}s`, cellCenterX, cellCenterY + 9);
+                    ctx.fillText(`${Math.ceil(timeUntilStart / 1000)}s`, cellCenterX, cellCenterY + 9 * fsScale);
                 } else if (isDragSelected) {
-                    ctx.font = `600 12px ${CHART_MONO}`;
+                    ctx.font = `600 ${fs + 1}px ${CHART_MONO}`;
                     ctx.fillStyle = '#fafafa';
-                    ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 6);
-                    ctx.font = `500 10px ${CHART_MONO}`;
+                    ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY - 6 * fsScale);
+                    ctx.font = `500 ${fs - 1}px ${CHART_MONO}`;
                     ctx.fillStyle = 'rgba(250, 250, 250, 0.7)';
-                    ctx.fillText('$' + betSize.toFixed(2), cellCenterX, cellCenterY + 8);
+                    ctx.fillText('$' + betSize.toFixed(2), cellCenterX, cellCenterY + 8 * fsScale);
                 } else {
-                    ctx.font = isHovered ? `600 13px ${CHART_MONO}` : `500 11px ${CHART_MONO}`;
+                    ctx.font = isHovered ? `600 ${fs + 2}px ${CHART_MONO}` : `500 ${fs}px ${CHART_MONO}`;
                     ctx.fillStyle = `rgba(${tr}, ${tg}, ${tb}, ${Math.min(1, isHovered ? 1 : baseOpacity + 0.1)})`;
-                    const yOff = isHovered && prob >= 0.005 ? -6 : 0;
+                    const yOff = isHovered && prob >= 0.005 ? -6 * fsScale : 0;
                     ctx.fillText(formatMultiplier(mult), cellCenterX, cellCenterY + yOff);
                     if (isHovered && prob >= 0.005) {
-                        ctx.font = `500 9px ${CHART_MONO}`;
+                        ctx.font = `500 ${Math.max(7.5, fs - 2)}px ${CHART_MONO}`;
                         ctx.fillStyle = 'rgba(161, 161, 170, 0.9)';
-                        ctx.fillText((prob * 100).toFixed(1) + '%', cellCenterX, cellCenterY + 9);
+                        ctx.fillText((prob * 100).toFixed(1) + '%', cellCenterX, cellCenterY + 9 * fsScale);
                     }
                 }
             }
@@ -2981,15 +3012,15 @@
                     cellCenterY >= padding.top - 20 && cellCenterY <= bottom + 20) {
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.font = `600 ${Math.round(12 * scale)}px ${CHART_MONO}`;
+                    ctx.font = `600 ${Math.round((fs + 1) * scale)}px ${CHART_MONO}`;
                     ctx.fillStyle = textColor;
-                    ctx.fillText(formatMultiplier(box.multiplier), cellCenterX, cellCenterY - 6 * scale);
-                    ctx.font = `500 ${Math.round(10 * scale)}px ${CHART_MONO}`;
+                    ctx.fillText(formatMultiplier(box.multiplier), cellCenterX, cellCenterY - 6 * scale * fsScale);
+                    ctx.font = `500 ${Math.round((fs - 1) * scale)}px ${CHART_MONO}`;
                     ctx.fillStyle = subColor;
                     const betText = box.touched
                         ? '+$' + (box.payout || box.betAmount * box.multiplier).toFixed(2)
                         : '$' + box.betAmount.toFixed(2);
-                    ctx.fillText(betText, cellCenterX, cellCenterY + 8 * scale);
+                    ctx.fillText(betText, cellCenterX, cellCenterY + 8 * scale * fsScale);
                 }
 
                 if (box.touched && timeSinceTouch < 1500) {
@@ -3631,6 +3662,10 @@
 
         // Initialize
         window.addEventListener('resize', resizeCanvas);
+        // The chart's box also changes without a window resize (e.g. the
+        // header wraps when Recenter appears on a narrow screen) — follow it,
+        // or the drawing is stretched and old pixels show at the edge.
+        if (window.ResizeObserver) new ResizeObserver(() => resizeCanvas()).observe(canvas);
         resizeCanvas();
         initTradingUI();
         fetch24hStats();
