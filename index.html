@@ -483,6 +483,29 @@
             gap: 16px;
         }
         .chart-title { font-size: 12px; font-weight: 500; color: var(--text-2); }
+        .chart-header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .pan-controls { display: flex; align-items: center; gap: 3px; }
+        .pan-btn {
+            width: 24px; height: 22px;
+            display: grid; place-items: center;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text-3);
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .pan-btn:hover { color: var(--text); border-color: var(--border-2); }
+        .recenter-btn {
+            display: none;
+            margin-left: 4px;
+            height: 22px; padding: 0 9px;
+            border-radius: 6px;
+            border: 1px solid var(--accent);
+            background: var(--accent);
+            color: var(--accent-ink);
+            font-size: 11px; font-weight: 600;
+        }
+        .recenter-btn.show { display: inline-block; }
         .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; }
         .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); }
         .legend-swatch { display: inline-block; border-radius: 2px; }
@@ -1058,7 +1081,24 @@
 
             <div class="chart-container">
                 <div class="chart-header">
-                    <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> · 5s TWAP · 10 sec × $10</h2>
+                    <div class="chart-header-left">
+                        <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> · 5s TWAP · 10 sec × $10</h2>
+                        <div class="pan-controls" role="group" aria-label="Move the view">
+                            <button class="pan-btn" onclick="panView(1, 0)" title="Look higher (↑ or scroll)" aria-label="Look higher">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+                            </button>
+                            <button class="pan-btn" onclick="panView(-1, 0)" title="Look lower (↓ or scroll)" aria-label="Look lower">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <button class="pan-btn" onclick="panView(0, PAN_STEP_MS)" title="Look back in time (← or shift+scroll)" aria-label="Look back in time">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                            </button>
+                            <button class="pan-btn" onclick="panView(0, -PAN_STEP_MS)" title="Toward now (→)" aria-label="Toward now">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                            </button>
+                            <button class="recenter-btn" id="recenterBtn" onclick="recenterView()" title="Back to live (C)">Recenter</button>
+                        </div>
+                    </div>
                     <div class="chart-legend">
                         <div class="legend-item"><span class="legend-swatch line"></span>5s TWAP</div>
                         <div class="legend-item"><span class="legend-swatch live"></span>Live trades</div>
@@ -1362,6 +1402,31 @@
         // smoothly by itself, so no spring is needed and what you see is
         // exactly what is settled.
         let twapHead = null;
+
+        // Rows priced around the price (server prices the same band). 15 rows
+        // are visible; panning reveals the rest.
+        const QUOTE_LEVELS_EACH_SIDE = 12;
+
+        // Chart panning: look around, but not too far.
+        let viewPanRows = 0;              // + = looking higher
+        let viewPanMs = 0;                // + = looking further back in time
+        const PAN_MAX_ROWS = 5;           // up/down, all still priced
+        const PAN_MAX_PAST_MS = 60000;    // up to a minute of extra history
+        const PAN_STEP_MS = 5000;
+        function panView(dRows, dMs) {
+            viewPanRows = Math.max(-PAN_MAX_ROWS, Math.min(PAN_MAX_ROWS, viewPanRows + dRows));
+            viewPanMs = Math.max(0, Math.min(PAN_MAX_PAST_MS, viewPanMs + dMs));
+            updatePanUi();
+        }
+        function recenterView() {
+            viewPanRows = 0;
+            viewPanMs = 0;
+            updatePanUi();
+        }
+        function updatePanUi() {
+            const btn = document.getElementById('recenterBtn');
+            if (btn) btn.classList.toggle('show', viewPanRows !== 0 || viewPanMs !== 0);
+        }
         // Ticks reach the browser in ~100ms batches; drawing slightly behind
         // "now" means the line never has to be redrawn when a late tick lands.
         const TWAP_DISPLAY_LAG_MS = 150;
@@ -1593,7 +1658,7 @@
             const msPerCell = 10000;
             const pricePerCell = 10;
             const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
-            const centerPrice = Math.round(price / pricePerCell) * pricePerCell;
+            const centerPrice = Math.round(gamePrice() / pricePerCell) * pricePerCell;
             
             const cells = [];
             
@@ -1718,8 +1783,10 @@
             // Get cells to consider based on pattern
             let cellsToCheck;
             if (autoBetPattern === 'threshold') {
-                // Threshold mode: check all cells
-                cellsToCheck = Object.keys(gridMultipliers);
+                // Threshold mode: cells within the default view (±7 rows of the
+                // price), not the extra rows priced only for panning
+                const midRow = Math.floor(gamePrice() / 10) * 10;
+                cellsToCheck = Object.keys(gridMultipliers).filter(k => Math.abs(Number(k.split('_')[1]) - midRow) <= 70);
             } else {
                 // Other patterns: only check pattern cells
                 cellsToCheck = getPatternCellKeys();
@@ -2289,10 +2356,12 @@
             const volPerStep = vol * Math.sqrt(1 / (365 * 24 * 60 * 60));
             const drift = -0.5 * volPerStep * volPerStep;
 
+            // Same priced band as the server: 12 rows each side (15 visible, the
+            // rest reachable by panning up/down).
             const center = Math.round(twapNow / pricePerCell) * pricePerCell;
-            const nLevels = 11;
-            const minLevel = center - 5 * pricePerCell;
-            const maxLevel = center + 5 * pricePerCell;
+            const nLevels = 2 * QUOTE_LEVELS_EACH_SIDE + 1;
+            const minLevel = center - QUOTE_LEVELS_EACH_SIDE * pricePerCell;
+            const maxLevel = center + QUOTE_LEVELS_EACH_SIDE * pricePerCell;
 
             const lastEnd = part.start;
             const currentCellStart = Math.floor(now / msPerCell) * msPerCell;
@@ -2506,15 +2575,18 @@
             const msPerCell = 10000; // 10 seconds per cell
             const now = serverNow();
 
-            // Time range: 30s past to 2 min future (shows all simulated cells)
-            const pastRange = 30000;
-            const futureRange = 120000;
+            // Time range: 30s past to 2 min future (all simulated columns),
+            // shifted back when the user pans into history.
+            const pastRange = 30000 + viewPanMs;
+            const futureRange = 120000 - viewPanMs;
             const timeStart = now - pastRange;
             const timeEnd = now + futureRange;
 
-            // Price range centered on the smoothed game price
-            const centerPrice = displayPrice || price || 97000;
-            const totalPriceRange = 120;
+            // Price range: 15 rows around the smoothed game price, shifted when
+            // the user pans up/down.
+            const livePrice = displayPrice || price || 97000;
+            const centerPrice = livePrice + viewPanRows * pricePerCell;
+            const totalPriceRange = 160;
             const minPrice = centerPrice - totalPriceRange / 2;
             const maxPrice = centerPrice + totalPriceRange / 2;
 
@@ -2522,6 +2594,7 @@
             const priceToY = (p) => padding.top + ((maxPrice - p) / (maxPrice - minPrice)) * chartHeight;
             const nowX = timeToX(now);
             const centerY = padding.top + chartHeight / 2;
+            const priceY = priceToY(livePrice); // where the price is (differs from centerY when panned)
             const right = padding.left + chartWidth;
             const bottom = padding.top + chartHeight;
 
@@ -2732,7 +2805,7 @@
                 const highlighted = isHovered || isDragSelected || isPatternCell;
 
                 const distX = Math.abs(cellCenterX - nowX) / (chartWidth / 2);
-                const distY = Math.abs(cellCenterY - centerY) / (chartHeight / 2);
+                const distY = Math.abs(cellCenterY - priceY) / (chartHeight / 2);
                 const dist = Math.min(1, Math.sqrt(distX * distX + distY * distY) / Math.sqrt(2));
                 const baseOpacity = (0.28 + (1 - dist) * 0.62) * fadeFactor;
 
@@ -3512,6 +3585,37 @@
         setInterval(cleanAutoBetLocked, 5000);
         
         // Mouse down - start drag selection
+        // Panning: wheel / trackpad (vertical = rows, horizontal or shift = time)
+        let wheelAccX = 0, wheelAccY = 0;
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+            if (horizontal) {
+                wheelAccX += e.shiftKey ? e.deltaY : e.deltaX;
+                while (Math.abs(wheelAccX) >= 40) {
+                    const s = Math.sign(wheelAccX);
+                    panView(0, -s * PAN_STEP_MS);
+                    wheelAccX -= s * 40;
+                }
+            } else {
+                wheelAccY += e.deltaY;
+                while (Math.abs(wheelAccY) >= 40) {
+                    const s = Math.sign(wheelAccY);
+                    panView(-s, 0);
+                    wheelAccY -= s * 40;
+                }
+            }
+        }, { passive: false });
+
+        // Panning: arrow keys (C or Home recenters), unless typing in a field
+        document.addEventListener('keydown', (e) => {
+            const tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || document.getElementById('depositModal').classList.contains('show')) return;
+            const moves = { ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, PAN_STEP_MS], ArrowRight: [0, -PAN_STEP_MS] };
+            if (moves[e.key]) { e.preventDefault(); panView(...moves[e.key]); }
+            else if (e.key === 'Home' || e.key === 'c' || e.key === 'C') recenterView();
+        });
+
         canvas.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return; // Left click only
             if (!window.chartParams) return;

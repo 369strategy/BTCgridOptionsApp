@@ -16,7 +16,7 @@ const GAME = {
   // (same rule the UI enforces), and no further out than the simulated horizon.
   MIN_LEAD_MS: 10000,
   HORIZON_CELLS: 12,       // columns simulated ahead of the current one
-  LEVELS_EACH_SIDE: 5,     // rows simulated above and below the current price
+  LEVELS_EACH_SIDE: 12,    // rows priced above and below the price (15 visible; the rest reachable by panning). Must match index.html QUOTE_LEVELS_EACH_SIDE
 
   // Monte Carlo
   NUM_PATHS: 5000,
