@@ -12,7 +12,7 @@ const pricing = require('./pricing');
 const twap = require('./twap');
 
 const { GAME } = config;
-const events = new EventEmitter(); // 'bet' (wallet, payload), 'account' (wallet)
+const events = new EventEmitter(); // 'bet' (wallet, payload), 'account' (wallet), 'houseEdge' (value)
 
 // In-memory mirror of open bets, so every tick can be checked without a query.
 // id -> { id, wallet, cellTs, level, amount, mult, hi, lo, settling, pending }
@@ -29,7 +29,26 @@ const flags = { betsPaused: false, withdrawalsPaused: false };
 async function loadFlags() {
   for (const row of await Setting.findAll()) {
     if (row.key in flags) flags[row.key] = row.value === 'true';
+    if (row.key === 'houseEdge' && validHouseEdge(Number(row.value))) GAME.HOUSE_EDGE = Number(row.value);
   }
+}
+
+const validHouseEdge = (v) => Number.isFinite(v) && v >= GAME.HOUSE_EDGE_MIN - 1e-9 && v <= GAME.HOUSE_EDGE_MAX + 1e-9;
+
+/**
+ * Admin-only (signed): change the house edge for every new quote. Open bets
+ * keep the multiplier they were filled at.
+ */
+async function setHouseEdge(value) {
+  const v = Math.round(Number(value) * 100) / 100;
+  if (!validHouseEdge(v)) {
+    throw httpError(400, `House edge must be ${GAME.HOUSE_EDGE_MIN * 100}–${GAME.HOUSE_EDGE_MAX * 100}%`);
+  }
+  await Setting.upsert({ key: 'houseEdge', value: String(v) });
+  GAME.HOUSE_EDGE = v;
+  pricing.invalidate(); // no bet may fill off a quote made at the old edge
+  events.emit('houseEdge', v);
+  return v;
 }
 
 async function setFlag(key, value) {
@@ -394,5 +413,5 @@ function httpError(status, message) {
 }
 
 module.exports = {
-  start, placeBets, account, openBetsFor, publicBet, openExposure, events, flags, setFlag, httpError,
+  start, placeBets, account, openBetsFor, publicBet, openExposure, events, flags, setFlag, setHouseEdge, httpError,
 };

@@ -10,6 +10,7 @@ const game = require('./game');
 const deposits = require('./deposits');
 const withdrawals = require('./withdrawals');
 const auth = require('./auth');
+const admin = require('./admin');
 
 const router = express.Router();
 
@@ -82,6 +83,7 @@ router.post('/auth/login', byIp(20), wrap(async (req, res) => {
   const check = solana.verifyWalletSignature({ wallet, message, signature });
   if (!check.ok) return res.status(401).json({ error: check.reason });
   const session = auth.issueToken(wallet);
+  admin.recordLogin(wallet).catch(err => console.error(`[api] recording login failed: ${err.message}`));
   res.json({ ...session, wallet, isAdmin: config.ADMIN_WALLETS.includes(wallet) });
 }));
 
@@ -163,7 +165,8 @@ router.get('/admin/status', auth.requireSession, auth.requireAdmin, wrap(async (
     withdrawalsInReview: review,
     feed: { source: feed.source, live: feed.isLive(), price: feed.price },
     config: {
-      houseEdge: config.GAME.HOUSE_EDGE, maxBet: config.GAME.MAX_BET,
+      houseEdge: config.GAME.HOUSE_EDGE, houseEdgeMin: config.GAME.HOUSE_EDGE_MIN, houseEdgeMax: config.GAME.HOUSE_EDGE_MAX,
+      maxBet: config.GAME.MAX_BET,
       maxExposureFrac: config.GAME.MAX_EXPOSURE_FRAC, maxSingleWinFrac: config.GAME.MAX_SINGLE_WIN_FRAC,
     },
   });
@@ -175,6 +178,25 @@ router.post('/admin/house/withdraw',
   wrap(async (req, res) => {
     const r = await withdrawals.withdraw({ wallet: req.wallet, amount: req.body.amount, kind: 'house' });
     res.json({ ok: true, ...r });
+  }));
+
+// Every player (signed in or played) with balance, deposits, withdrawals and P&L.
+router.get('/admin/players', auth.requireSession, auth.requireAdmin, wrap(async (req, res) => {
+  res.json(await admin.playersReport());
+}));
+
+// All trades of all players, newest first (?wallet=&status=&before=<id>&limit=).
+router.get('/admin/bets', auth.requireSession, auth.requireAdmin, wrap(async (req, res) => {
+  res.json(await admin.betsReport(req.query));
+}));
+
+router.post('/admin/house-edge',
+  auth.requireSession, auth.requireAdmin, byWallet(20),
+  auth.requireSignedAction('set_house_edge', (req, msg) => auth.hasLine(msg, 'Value', Number(req.body.value).toFixed(2))),
+  wrap(async (req, res) => {
+    const houseEdge = await game.setHouseEdge(req.body.value);
+    console.log(`[admin] ${req.wallet} set the house edge to ${Math.round(houseEdge * 100)}%`);
+    res.json({ ok: true, houseEdge });
   }));
 
 router.post('/admin/flags',

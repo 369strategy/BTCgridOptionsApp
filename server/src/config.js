@@ -59,9 +59,15 @@ const GAME = {
   VOL_CALM_MIN: 0.05,
 
   // Multiplier = clamp((1 - HOUSE_EDGE) / prob, MIN_MULT, MAX_MULT).
-  // The pre-merge app defaulted its slider to 50%; real money now uses this
-  // fixed server value and ignores anything the browser sends.
-  HOUSE_EDGE: Number(process.env.HOUSE_EDGE || 0.5),
+  // Standard 60%. Only an admin can change it (admin page slider, signed by an
+  // ADMIN_WALLETS wallet); the value is stored in the settings table and
+  // replaces this one at startup (game.js loadFlags). Players can't touch it.
+  // Never below HOUSE_EDGE_MIN: the trade-level replay of a violent market
+  // returned up to 95% of stakes on some cells at a 50% edge, so a lower edge
+  // would make those cells profitable to bet.
+  HOUSE_EDGE: 0.6,
+  HOUSE_EDGE_MIN: 0.5,
+  HOUSE_EDGE_MAX: 0.95,
   MIN_MULT: 1.01,
   MAX_MULT: 100,
   MAX_PROB: 0.95,

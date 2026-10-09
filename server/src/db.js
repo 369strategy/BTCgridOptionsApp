@@ -110,7 +110,14 @@ const Bet = sequelize.define('Bet', {
   ],
 });
 
-// Operator switches (pause betting / withdrawals).
+// Every wallet that has signed in (admin player list).
+const Player = sequelize.define('Player', {
+  wallet: { type: DataTypes.STRING, primaryKey: true },
+  logins: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  lastSeenAt: { type: DataTypes.DATE },
+}, { tableName: 'players' });
+
+// Operator switches (pause betting / withdrawals) and the house edge.
 const Setting = sequelize.define('Setting', {
   key: { type: DataTypes.STRING, primaryKey: true },
   value: { type: DataTypes.STRING, allowNull: false },
@@ -124,5 +131,5 @@ async function init() {
 
 module.exports = {
   sequelize, init,
-  LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting,
+  LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player,
 };

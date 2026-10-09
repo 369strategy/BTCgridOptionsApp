@@ -9,24 +9,43 @@
     :root { --bg: #0a0a0f; --card: #12121a; --line: #2a2a3a; --muted: #8888aa; --ok: #00ff88; --bad: #ff4466; --accent: #00d4ff; --warn: #ffc800; }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: #fff; font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+    main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
     h1 { font-size: 20px; margin: 0 0 4px; }
     .sub { color: var(--muted); margin-bottom: 20px; }
     .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
     .card h2 { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+    .card h2 .count { color: #fff; letter-spacing: 0; text-transform: none; margin-left: 6px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
     .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
     .stat .v { font: 600 18px/1.3 monospace; }
-    .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+    .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); } .muted { color: var(--muted); }
     button { background: linear-gradient(135deg, #00d4ff, #00ff88); color: #000; border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; cursor: pointer; }
     button.secondary { background: #1a1a2e; color: #fff; border: 1px solid var(--line); }
+    button.small { padding: 6px 10px; font-size: 12px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    input { background: var(--bg); color: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 15px monospace; width: 160px; }
+    input, select { background: var(--bg); color: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: 15px monospace; width: 160px; }
+    select { font: 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; width: auto; }
+    input#tradeWallet { width: 380px; max-width: 100%; font-size: 13px; }
     .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     code { background: #1a1a2e; padding: 2px 6px; border-radius: 4px; word-break: break-all; }
     #msg { min-height: 22px; margin: 8px 0 16px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    td, th { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+    td, th { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; background: var(--card); }
+    td.num, th.num { text-align: right; font-family: monospace; }
+    .scroll { overflow: auto; max-height: 560px; }
+    tr.player { cursor: pointer; }
+    tr.player:hover td { background: #191926; }
+    tr.player.selected td { background: #1c1c30; }
+    .tag { font-size: 10px; padding: 1px 6px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); margin-left: 6px; }
+    .wallet { font-family: monospace; }
+    a { color: var(--accent); }
+
+    /* house edge */
+    .edge-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .edge-value { font: 600 28px/1 monospace; min-width: 90px; }
+    input[type=range] { width: 320px; max-width: 100%; padding: 0; border: 0; background: transparent; accent-color: #00d4ff; }
+    .edge-example { color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -49,6 +68,68 @@
                 <code id="vaultAddr"></code> — a plain wallet Send works; it is credited within a minute.
                 Keep ~0.05 SOL in the vault for withdrawal fees.
             </p>
+        </div>
+
+        <div class="card">
+            <h2>House edge</h2>
+            <div class="edge-row">
+                <div class="edge-value" id="edgeValue">—</div>
+                <input type="range" id="edgeSlider" min="50" max="95" step="5" value="60" oninput="previewEdge()">
+                <button id="edgeSave" onclick="saveEdge()" disabled>Save</button>
+            </div>
+            <p class="edge-example" id="edgeExample"></p>
+            <p class="sub" style="margin:0">
+                Applies to every new quote at once (real money and the demo); open bets keep the multiplier they were filled at.
+                Players can't change it. <span id="edgeRange"></span>
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Players &amp; profit/loss <span class="count" id="playerCount"></span></h2>
+            <div class="grid" id="playerTotals" style="margin-bottom:14px"></div>
+            <div class="scroll">
+                <table>
+                    <thead><tr>
+                        <th>Wallet</th><th class="num">Logins</th><th>Last seen</th>
+                        <th class="num">Balance</th><th class="num">In play</th><th class="num">Deposited</th><th class="num">Withdrawn</th>
+                        <th class="num">Bets</th><th class="num">W / L / open</th><th class="num">Staked</th><th class="num">Paid out</th>
+                        <th class="num">Player P&amp;L</th><th>Last bet</th>
+                    </tr></thead>
+                    <tbody id="players"></tbody>
+                </table>
+            </div>
+            <p class="sub" style="margin:10px 0 0">
+                P&amp;L = payouts of won bets − stakes of won and lost bets (void bets were refunded). Positive = the player is up, the house is down.
+                Click a player to see only their trades.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>All trades <span class="count" id="tradeCount"></span></h2>
+            <div class="row" style="margin-bottom:12px">
+                <input id="tradeWallet" placeholder="All players (or paste a wallet)" onchange="loadTrades()">
+                <select id="tradeStatus" onchange="loadTrades()">
+                    <option value="">All results</option>
+                    <option value="open">Open</option>
+                    <option value="won">Won</option>
+                    <option value="lost">Lost</option>
+                    <option value="void">Void</option>
+                </select>
+                <button class="secondary small" onclick="clearTradeFilter()">Show all players</button>
+            </div>
+            <div class="scroll">
+                <table>
+                    <thead><tr>
+                        <th class="num">#</th><th>Placed</th><th>Wallet</th><th>Column</th><th class="num">Row</th>
+                        <th class="num">Stake</th><th class="num">Mult</th><th class="num">Chance</th><th>Result</th>
+                        <th class="num">Payout</th><th class="num">Player P&amp;L</th><th>Evidence</th>
+                    </tr></thead>
+                    <tbody id="trades"></tbody>
+                </table>
+            </div>
+            <div class="row" style="margin-top:10px">
+                <button class="secondary small" id="moreBtn" onclick="loadMoreTrades()" style="display:none">Load older trades</button>
+            </div>
         </div>
 
         <div class="card">
@@ -76,6 +157,7 @@
 </main>
 <script>
     let provider = null, wallet = null, token = null, status = null;
+    let trades = [], tradesHasMore = false, edgeDirty = false;
     const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     function b58(bytes) {
         const d = [0];
@@ -91,6 +173,11 @@
     }
     const $ = (id) => document.getElementById(id);
     const money = (x) => '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const signed = (x) => { const v = Number(x || 0); const c = v > 0.004 ? 'ok' : v < -0.004 ? 'bad' : 'muted'; return `<span class="${c}">${v > 0.004 ? '+' : v < -0.004 ? '−' : ''}${money(Math.abs(v))}</span>`; };
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const short = (w) => w.length > 12 ? w.slice(0, 4) + '…' + w.slice(-4) : w;
+    const when = (d) => d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+    const clock = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour12: false });
     function say(text, cls) { $('msg').className = cls || ''; $('msg').textContent = text; }
 
     async function sign(action, extra = {}) {
@@ -128,8 +215,14 @@
             $('connectBtn').style.display = 'none';
             $('panel').style.display = 'block';
             say('');
-            await load();
-            setInterval(load, 15000);
+            await refresh();
+            setInterval(refresh, 15000);
+        } catch (e) { say(e.message, 'bad'); }
+    }
+
+    async function refresh() {
+        try {
+            await Promise.all([load(), loadPlayers(), trades.length > 200 ? null : loadTrades()]);
         } catch (e) { say(e.message, 'bad'); }
     }
 
@@ -145,7 +238,7 @@
             ['Open stakes (escrow)', money(L.escrow)],
             ['House bankroll', money(L.house)],
             ['Open exposure', money(status.exposure)],
-            ['Feed', status.feed.source + (status.feed.live ? ' <span class="ok">live</span>' : ' <span class="bad">down</span>')],
+            ['Feed', esc(status.feed.source) + (status.feed.live ? ' <span class="ok">live</span>' : ' <span class="bad">down</span>')],
             ['House edge', Math.round(status.config.houseEdge * 100) + '%'],
         ];
         $('solvency').innerHTML = stats.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
@@ -155,8 +248,135 @@
         $('wdBtn').textContent = status.flags.withdrawalsPaused ? 'Resume withdrawals' : 'Pause withdrawals';
         const rv = status.withdrawalsInReview;
         $('review').innerHTML = !rv.length ? 'None' : '<table><tr><th>ID</th><th>Wallet</th><th>Amount</th><th>Signature</th></tr>'
-            + rv.map(w => `<tr><td>${w.id}</td><td><code>${w.wallet}</code></td><td>${money(w.amount)}</td><td>${w.signature ? `<a style="color:#00d4ff" target="_blank" rel="noopener" href="https://solscan.io/tx/${encodeURIComponent(w.signature)}">check on Solscan</a>` : '—'}</td></tr>`).join('')
+            + rv.map(w => `<tr><td>${w.id}</td><td><code>${esc(w.wallet)}</code></td><td>${money(w.amount)}</td><td>${w.signature ? `<a target="_blank" rel="noopener" href="https://solscan.io/tx/${encodeURIComponent(w.signature)}">check on Solscan</a>` : '—'}</td></tr>`).join('')
             + '</table><p class="sub">Unknown-outcome payouts. Check the signature on-chain before doing anything: if it landed, the user was paid.</p>';
+        showEdge();
+    }
+
+    // ---------------- house edge ----------------
+    function showEdge() {
+        const c = status.config;
+        const s = $('edgeSlider');
+        s.min = Math.round(c.houseEdgeMin * 100);
+        s.max = Math.round(c.houseEdgeMax * 100);
+        $('edgeRange').textContent = `Allowed: ${s.min}–${s.max}%.`;
+        if (!edgeDirty) s.value = Math.round(c.houseEdge * 100);
+        previewEdge();
+    }
+    function previewEdge() {
+        const v = Number($('edgeSlider').value);
+        const current = Math.round(status.config.houseEdge * 100);
+        edgeDirty = v !== current;
+        $('edgeValue').textContent = v + '%';
+        $('edgeSave').disabled = !edgeDirty;
+        $('edgeSave').textContent = edgeDirty ? `Save ${v}% (now ${current}%)` : 'Saved';
+        const mult = (p) => Math.min(100, Math.max(1.01, (1 - v / 100) / p)).toFixed(2) + 'x';
+        $('edgeExample').textContent = `Players get back about ${100 - v}% of what they stake on average. `
+            + `A cell with a 10% chance pays ${mult(0.10)}, a 25% chance pays ${mult(0.25)}, a 2% chance pays ${mult(0.02)}.`;
+    }
+    async function saveEdge() {
+        const value = Number($('edgeSlider').value) / 100;
+        try {
+            const s = await sign('set_house_edge', { Value: value.toFixed(2) });
+            const r = await api('/admin/house-edge', { method: 'POST', body: { value, authMessage: s.message, authSignature: s.signature } });
+            edgeDirty = false;
+            say('House edge set to ' + Math.round(r.houseEdge * 100) + '% — new odds are live', 'ok');
+            await load();
+        } catch (e) { say(e.message, 'bad'); }
+    }
+
+    // ---------------- players ----------------
+    async function loadPlayers() {
+        const r = await api('/admin/players');
+        const t = r.totals;
+        $('playerCount').textContent = t.players;
+        $('playerTotals').innerHTML = [
+            ['Players', t.players],
+            ['Bets', t.bets.toLocaleString('en-US')],
+            ['Staked (settled)', money(t.staked)],
+            ['Paid out', money(t.paid)],
+            ['House P&L on bets', signed(t.housePnl)],
+            ['Players deposited', money(t.deposited)],
+            ['Players withdrew', money(t.withdrawn)],
+        ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+        const sel = $('tradeWallet').value.trim();
+        $('players').innerHTML = r.players.map(p => `
+            <tr class="player${p.wallet === sel ? ' selected' : ''}" data-wallet="${esc(p.wallet)}" onclick="showPlayer(this.dataset.wallet)" title="${esc(p.wallet)}">
+                <td class="wallet">${esc(short(p.wallet))}${p.isAdmin ? '<span class="tag">admin</span>' : ''}
+                    <a href="https://solscan.io/account/${encodeURIComponent(p.wallet)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open on Solscan">↗</a></td>
+                <td class="num">${p.logins}</td>
+                <td>${when(p.lastSeenAt)}</td>
+                <td class="num">${money(p.balance)}</td>
+                <td class="num">${money(p.inPlay)}</td>
+                <td class="num">${money(p.deposited)}</td>
+                <td class="num">${money(p.withdrawn)}${p.withdrawPending ? ` <span class="warn" title="sending / in review">+${money(p.withdrawPending)}</span>` : ''}</td>
+                <td class="num">${p.bets}</td>
+                <td class="num">${p.wins} / ${p.losses} / ${p.open}</td>
+                <td class="num">${money(p.staked)}</td>
+                <td class="num">${money(p.paid)}</td>
+                <td class="num">${signed(p.pnl)}</td>
+                <td>${when(p.lastBetAt)}</td>
+            </tr>`).join('') || '<tr><td colspan="13" class="muted">No players yet</td></tr>';
+    }
+    function showPlayer(w) {
+        $('tradeWallet').value = w;
+        $('tradeStatus').value = '';
+        loadTrades();
+        loadPlayers();
+        $('tradeWallet').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function clearTradeFilter() {
+        $('tradeWallet').value = '';
+        $('tradeStatus').value = '';
+        loadTrades();
+        loadPlayers();
+    }
+
+    // ---------------- trades ----------------
+    function tradeQuery(before) {
+        const q = new URLSearchParams({ limit: '200' });
+        const w = $('tradeWallet').value.trim();
+        if (w) q.set('wallet', w);
+        if ($('tradeStatus').value) q.set('status', $('tradeStatus').value);
+        if (before) q.set('before', before);
+        return '/admin/bets?' + q;
+    }
+    async function loadTrades() {
+        const r = await api(tradeQuery());
+        trades = r.bets;
+        tradesHasMore = r.hasMore;
+        renderTrades();
+    }
+    async function loadMoreTrades() {
+        if (!trades.length) return;
+        const r = await api(tradeQuery(trades[trades.length - 1].id));
+        trades = trades.concat(r.bets);
+        tradesHasMore = r.hasMore;
+        renderTrades();
+    }
+    function renderTrades() {
+        $('tradeCount').textContent = trades.length + (tradesHasMore ? '+' : '');
+        $('moreBtn').style.display = tradesHasMore ? '' : 'none';
+        const res = { won: '<span class="ok">won</span>', lost: '<span class="bad">lost</span>', open: '<span class="warn">open</span>', void: '<span class="muted">void</span>' };
+        $('trades').innerHTML = trades.map(b => {
+            const evidence = b.status === 'won' ? `touched ${money(b.touchPrice)} at ${clock(b.touchAt)}`
+                : b.status === 'lost' && b.windowLow !== null ? `range ${money(b.windowLow)}–${money(b.windowHigh)}`
+                : b.status === 'void' ? esc(b.voidReason || '') : '';
+            return `<tr>
+                <td class="num muted">${b.id}</td>
+                <td>${when(b.createdAt)}</td>
+                <td class="wallet"><a href="#" data-wallet="${esc(b.wallet)}" onclick="showPlayer(this.dataset.wallet); return false" title="${esc(b.wallet)}">${esc(short(b.wallet))}</a></td>
+                <td>${clock(b.cellTs)}–${clock(b.cellTs + 10000)}</td>
+                <td class="num">${money(b.priceLevel).slice(0, -3)}–${money(b.priceLevel + 10).slice(0, -3)}</td>
+                <td class="num">${money(b.amount)}</td>
+                <td class="num">${Number(b.multiplier).toFixed(2)}x</td>
+                <td class="num">${b.quotedProb === null ? '—' : (b.quotedProb * 100).toFixed(1) + '%'}</td>
+                <td>${res[b.status] || esc(b.status)}</td>
+                <td class="num">${b.payout === null ? '—' : money(b.payout)}</td>
+                <td class="num">${b.status === 'won' || b.status === 'lost' ? signed(b.pnl) : '—'}</td>
+                <td class="muted">${evidence}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="12" class="muted">No trades</td></tr>';
     }
 
     async function houseWithdraw() {

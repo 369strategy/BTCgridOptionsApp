@@ -6,6 +6,7 @@
 //   twap    every second: the published 5s TWAP point — the game's price
 //   grid    every 1s: current server multipliers per cell
 //   feed    when the source changes (futures -> spot)
+//   config  when an admin changes the house edge
 //   account / bet   per signed-in wallet (after {type:'auth', token})
 const WebSocket = require('ws');
 const config = require('./config');
@@ -142,6 +143,7 @@ function attach(server) {
   }, 15000);
 
   game.events.on('account', (wallet) => pushAccount(wallet));
+  game.events.on('houseEdge', (houseEdge) => broadcast({ type: 'config', houseEdge }));
   game.events.on('bet', (wallet, bet) => {
     for (const ws of wss.clients) if (ws.wallet === wallet) send(ws, { type: 'bet', bet });
   });

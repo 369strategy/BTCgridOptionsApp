@@ -269,6 +269,11 @@ function freshSim() {
   return latest;
 }
 
+/** Drop the cached quotes (e.g. the house edge changed). */
+function invalidate() {
+  latest = null;
+}
+
 /** A simulation run at or after time t (only feed data up to then counts). */
 function simSince(t) {
   if (!latest || latest.simTime < t) latest = simulate();
@@ -282,6 +287,6 @@ function tick() {
 }
 
 module.exports = {
-  freshSim, simSince, tick, cellKey, multiplierFor, calculateVolatility, estimateJumpParameters,
+  freshSim, simSince, tick, invalidate, cellKey, multiplierFor, calculateVolatility, estimateJumpParameters,
   get latest() { return latest; },
 };

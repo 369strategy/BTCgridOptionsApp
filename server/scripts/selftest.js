@@ -218,6 +218,42 @@ function nextGrid() {
   const flagNoSig = await api('/admin/flags', { method: 'POST', token: at, body: { key: 'betsPaused', value: true } });
   ok(flagNoSig.status === 401, 'admin change without a fresh signature is refused');
 
+  // dashboard: every player with P&L, every trade
+  ok((await api('/admin/players', { token: pt })).status === 403 && (await api('/admin/bets', { token: pt })).status === 403,
+    'non-admin cannot read the player list or trades');
+  const pl = await api('/admin/players', { token: at });
+  const me4 = (await api('/me', { token: pt })).body.account;
+  const row = pl.status === 200 && pl.body.players.find(p => p.wallet === P);
+  const wantPnl = Math.round(hist.reduce((s, b) => s + (b.status === 'won' ? b.payout - b.amount : b.status === 'lost' ? -b.amount : 0), 0) * 100) / 100;
+  ok(row && row.logins >= 1 && row.bets === 3 && row.wins + row.losses + row.voids === 3 && Math.abs(row.pnl - wantPnl) < 0.005
+    && Math.abs(row.balance - me4.balance) < 0.005 && Math.abs(row.pnl - me4.pnl) < 0.005,
+    `admin player list: test player with 3 bets, ${row && row.wins}W/${row && row.losses}L, P&L ${row && row.pnl} (= /me ${me4.pnl}), balance $${row && row.balance}`);
+  ok(Math.abs(pl.body.totals.housePnl + pl.body.totals.playerPnl) < 0.005, `house P&L is the players' P&L reversed (${pl.body.totals.housePnl})`);
+  const tr = await api(`/admin/bets?wallet=${P}`, { token: at });
+  ok(tr.status === 200 && tr.body.bets.length === 3 && tr.body.bets.every(b => b.wallet === P)
+    && Math.abs(tr.body.bets.reduce((s, b) => s + b.pnl, 0) - wantPnl) < 0.005,
+    `admin trade list filtered to the test player: 3 trades, P&L adds up to ${wantPnl}`);
+  const allTr = await api('/admin/bets?limit=5', { token: at });
+  ok(allTr.status === 200 && allTr.body.bets.length <= 5 && allTr.body.bets.every((b, i, a) => i === 0 || a[i - 1].id > b.id),
+    `admin trade list across all players, newest first (${allTr.body.bets.length} shown, more: ${allTr.body.hasMore})`);
+
+  // house edge: admin-only, signed, bounded
+  const edge0 = st.body.config.houseEdge;
+  const edgeBody = (v, signedV = v, kp = admin) => ({ value: v, ...signedAction(kp, 'set_house_edge', { Value: signedV.toFixed(2) }) });
+  ok((await api('/admin/house-edge', { method: 'POST', token: pt, body: edgeBody(0.65, 0.65, player) })).status === 403,
+    'a player cannot change the house edge');
+  ok((await api('/admin/house-edge', { method: 'POST', token: at, body: { value: 0.65 } })).status === 401,
+    'house edge change without a fresh signature is refused');
+  ok((await api('/admin/house-edge', { method: 'POST', token: at, body: edgeBody(0.65, 0.7) })).status === 401,
+    'house edge signature for a different value is refused');
+  const tooLow = await api('/admin/house-edge', { method: 'POST', token: at, body: edgeBody(0.3) });
+  ok(tooLow.status === 400, `house edge below the minimum is refused: "${tooLow.body.error}"`);
+  const setE = await api('/admin/house-edge', { method: 'POST', token: at, body: edgeBody(0.65) });
+  const cfg = (await api('/config')).body;
+  ok(setE.status === 200 && setE.body.houseEdge === 0.65 && cfg.houseEdge === 0.65, `admin sets the house edge to 65% (public config now ${cfg.houseEdge})`);
+  const back = await api('/admin/house-edge', { method: 'POST', token: at, body: edgeBody(edge0) });
+  ok(back.status === 200 && back.body.houseEdge === edge0, `house edge restored to ${Math.round(edge0 * 100)}%`);
+
   console.log('\nledger invariant');
   const total = Number(await db.LedgerEntry.sum('amount')) || 0;
   ok(Math.abs(total) < 1e-6, `all ledger rows sum to zero (${total.toFixed(6)})`);

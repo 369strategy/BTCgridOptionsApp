@@ -221,13 +221,6 @@
         .ghost-btn { background: transparent; font-family: var(--mono); }
         .reset-btn { font-family: var(--font); }
 
-        /* House edge */
-        .house-edge-section {
-            display: flex; flex-direction: column; gap: 8px;
-            padding-top: 4px;
-        }
-        .house-edge-display { font-family: var(--mono); font-size: 12px; color: var(--text); }
-
         input[type=range] {
             -webkit-appearance: none; appearance: none;
             width: 100%; height: 18px;
@@ -246,7 +239,6 @@
             width: 14px; height: 14px; border: none;
             border-radius: 50%; background: var(--accent);
         }
-        .house-edge-slider:disabled { opacity: 0.35; cursor: not-allowed; }
 
         /* Automation (collapsible) */
         .auto-bet-section {
@@ -514,7 +506,6 @@
         .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); }
         .legend-swatch { display: inline-block; border-radius: 2px; }
         .legend-swatch.line { width: 14px; height: 2px; background: var(--accent); }
-        .legend-swatch.live { width: 14px; height: 1px; background: rgba(255, 255, 255, 0.35); }
         .legend-swatch.bet { width: 9px; height: 9px; border: 1px solid rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.1); }
         .legend-swatch.win { width: 9px; height: 9px; border: 1px solid var(--green); background: var(--green-bg); }
         .legend-swatch.loss { width: 9px; height: 9px; border: 1px solid var(--red); background: var(--red-bg); }
@@ -890,16 +881,6 @@
                         <button class="ghost-btn reset-btn" onclick="resetDemo()">Reset demo</button>
                     </div>
 
-                    <div class="house-edge-section">
-                        <div class="row-between">
-                            <span class="section-label">House edge</span>
-                            <span class="house-edge-display" id="houseEdgeDisplay">50%</span>
-                        </div>
-                        <input type="range" class="house-edge-slider" id="houseEdgeSlider"
-                               min="5" max="95" step="5" value="50"
-                               oninput="updateHouseEdge(this.value)">
-                    </div>
-
                     <details class="auto-bet-section">
                         <summary>
                             <span class="section-label">Automation</span>
@@ -1087,7 +1068,6 @@
                     </div>
                     <div class="chart-legend">
                         <div class="legend-item"><span class="legend-swatch line"></span>Price</div>
-                        <div class="legend-item"><span class="legend-swatch live"></span>Live trades</div>
                         <div class="legend-item"><span class="legend-swatch bet"></span>Your bet</div>
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
                         <div class="legend-item"><span class="legend-swatch loss"></span>Loss</div>
@@ -1286,7 +1266,7 @@
         let price = null;
         let prevPrice = null;
         let startPrice = null;
-        let priceHistory = [];          // live Binance trades (faint line + volatility)
+        let priceHistory = [];          // live Binance trades (volatility; not drawn)
 
         // ---------- 5-second TWAP: the game's price ----------
         // A weighted time-average of the trade price over the last 5s. The
@@ -1441,7 +1421,7 @@
         let totalWins = 0;
         let totalLosses = 0;
         let pendingBets = 0;
-        let houseEdge = 0.50;
+        let houseEdge = 0.60;           // replaced by the server value (admin-set)
         let startingBalance = 10000; // Now let instead of const for mode switching
         
         // Locked boxes - will be swapped when mode changes
@@ -1591,13 +1571,6 @@
             
             updateBalanceDisplay();
             console.log('Demo reset to $10,000');
-        }
-        
-        // House edge control
-        function updateHouseEdge(value) {
-            houseEdge = parseInt(value) / 100;
-            document.getElementById('houseEdgeDisplay').textContent = value + '%';
-            console.log('House edge set to ' + value + '%');
         }
         
         // Auto-bet functions
@@ -2744,19 +2717,6 @@
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // Live Binance trades: faint reference line (not the game price)
-            const rawHistory = priceHistory.filter(d => d.time >= timeStart && d.time <= now);
-            if (rawHistory.length > 1) {
-                ctx.beginPath();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-                ctx.lineWidth = 1;
-                rawHistory.forEach((pt, i) => {
-                    const x = timeToX(pt.time), y = priceToY(pt.price);
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                });
-                ctx.stroke();
-            }
-
             // The game price: the tapered 5s TWAP at every 100ms grid point up to
             // the tip, joined by straight lines (exactly the line that settles bets).
             const lineEnd = now - TWAP_DISPLAY_LAG_MS;
@@ -3185,7 +3145,7 @@
         let serverWs = null;
         let serverFeedUp = false;
         let serverRetryMs = 1000;
-        let serverHouseEdge = 0.5;
+        let serverHouseEdge = 0.6;
         let lastServerGrid = null;
         let feedLabel = 'BTC/USDT';
         let clockSynced = false;
@@ -3265,14 +3225,19 @@
             }
         }
 
+        // The house edge is set by the admin on the server (standard 60%); demo
+        // odds use the same value, and players can't change it.
+        function setHouseEdgeFromServer(v) {
+            if (!(v > 0 && v < 1)) return;
+            serverHouseEdge = v;
+            houseEdge = v;
+        }
+
         function onServerHello(msg) {
             syncClock(msg.st);
             setFeedLabel(msg.feed.label);
-            serverHouseEdge = msg.game.houseEdge;
+            setHouseEdgeFromServer(msg.game.houseEdge);
             if (msg.game.maxBet > 0) { realMaxBet = msg.game.maxBet; applyBetCap(); }
-            if (isRealMode) {
-                document.getElementById('houseEdgeDisplay').textContent = Math.round(serverHouseEdge * 100) + '% (server)';
-            }
             // The server's 15-minute history is authoritative for the chart.
             seedHistory(msg.ticks.map(([t, p]) => ({ time: t, price: p })), true);
             if (msg.twap && msg.twap.length) {
@@ -3456,6 +3421,7 @@
                     case 'twap': syncClock(msg.st); twapFromServer = true; onTwapPoint(msg.t, msg.v); break;
                     case 'grid': applyServerGrid(msg); break;
                     case 'feed': onServerFeed(msg.feed); break;
+                    case 'config': setHouseEdgeFromServer(msg.houseEdge); break;
                     case 'account': applyAccount(msg.account); break;
                     case 'openBets': applyOpenBets(msg.bets); break;
                     case 'bet': applySettledBet(msg.bet); break;
@@ -3935,7 +3901,6 @@
             document.getElementById('realLabel').classList.toggle('active', isRealMode);
 
             const indicator = document.getElementById('balanceModeIndicator');
-            const slider = document.getElementById('houseEdgeSlider');
             if (isRealMode) {
                 indicator.textContent = 'REAL';
                 indicator.className = 'balance-mode-indicator real';
@@ -3946,13 +3911,6 @@
                 indicator.className = 'balance-mode-indicator demo';
                 document.getElementById('tradingPanel').classList.remove('real-mode-active');
                 showToast('DEMO MODE — Trading with $10,000 virtual balance', 'info');
-            }
-
-            // Real money uses the server's fixed house edge; the slider is demo-only.
-            if (slider) {
-                slider.disabled = isRealMode;
-                const pct = Math.round((isRealMode ? serverHouseEdge : houseEdge) * 100);
-                document.getElementById('houseEdgeDisplay').textContent = pct + '%' + (isRealMode ? ' (server)' : '');
             }
 
             // Multipliers come from the server in real mode, from the local sim in demo.
