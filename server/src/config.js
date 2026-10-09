@@ -174,7 +174,9 @@ module.exports = {
 
   // Session tokens (issued after a signed login message)
   SESSION_SECRET: process.env.SESSION_SECRET || null,
-  SESSION_TTL_MS: 12 * 60 * 60 * 1000,
+  // Returning players stay signed in this long (the page keeps the token);
+  // withdrawals and other money moves still need a fresh wallet signature.
+  SESSION_TTL_MS: 7 * 24 * 60 * 60 * 1000,
   // Signed-message freshness window (login, withdraw, admin actions)
   AUTH_MESSAGE_MAX_AGE_MS: 5 * 60 * 1000,
 

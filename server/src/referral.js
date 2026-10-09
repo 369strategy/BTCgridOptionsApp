@@ -120,7 +120,7 @@ async function info(wallet) {
   return {
     wallet,
     rate: GAME.AFFILIATE_SHARE,
-    refToken: (me && me.code) || wallet,       // what goes in ?ref=
+    refToken: wallet,                          // what goes in ?ref= (always the wallet)
     code: (me && me.code) || null,
     referredBy: (me && me.referrerWallet) || null,
     referrals: { total: referrals, active: Number(a.active || 0) },

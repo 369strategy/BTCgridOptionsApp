@@ -1312,18 +1312,6 @@
                             <img src="assets/logos/solana.svg" alt="Solana" width="20" height="20" onerror="logoFallback(this)">
                             Solana
                         </button>
-                        <button class="chain-btn soon" data-chain="ethereum" onclick="selectChain('ethereum')" aria-disabled="true">
-                            <img src="assets/logos/ethereum.svg" alt="Ethereum" width="20" height="20" onerror="logoFallback(this)">
-                            Ethereum <span class="soon-badge">Soon</span>
-                        </button>
-                        <button class="chain-btn soon" data-chain="arbitrum" onclick="selectChain('arbitrum')" aria-disabled="true">
-                            <img src="assets/logos/arbitrum.svg" alt="Arbitrum" width="20" height="20" onerror="logoFallback(this)">
-                            Arbitrum <span class="soon-badge">Soon</span>
-                        </button>
-                        <button class="chain-btn soon" data-chain="base" onclick="selectChain('base')" aria-disabled="true">
-                            <img src="assets/logos/base.png" alt="Base" width="20" height="20" onerror="logoFallback(this)">
-                            Base <span class="soon-badge">Soon</span>
-                        </button>
                         <button class="chain-btn soon" data-chain="hyperliquid" onclick="selectChain('hyperliquid')" aria-disabled="true">
                             <img src="assets/logos/hyperliquid.png" alt="Hyperliquid" width="20" height="20" onerror="logoFallback(this)">
                             Hyperliquid <span class="soon-badge">Soon</span>
@@ -4094,9 +4082,10 @@
         // ================================================
         // MODE SWITCHING
         // ================================================
-        function toggleTradingMode() {
+        function toggleTradingMode(opts = {}) {
             const toggle = document.getElementById('modeToggle');
             isRealMode = toggle.checked;
+            if (!opts.quiet) lsSet(MODE_KEY, isRealMode ? 'real' : 'demo');
 
             document.getElementById('demoLabel').classList.toggle('active', !isRealMode);
             document.getElementById('realLabel').classList.toggle('active', isRealMode);
@@ -4106,12 +4095,12 @@
                 indicator.textContent = 'REAL';
                 indicator.className = 'balance-mode-indicator real';
                 document.getElementById('tradingPanel').classList.add('real-mode-active');
-                showToast('REAL MONEY MODE — odds, bets and results are decided by the server. Trade responsibly!', 'warning');
+                if (!opts.quiet) showToast('REAL MONEY MODE — odds, bets and results are decided by the server. Trade responsibly!', 'warning');
             } else {
                 indicator.textContent = 'DEMO';
                 indicator.className = 'balance-mode-indicator demo';
                 document.getElementById('tradingPanel').classList.remove('real-mode-active');
-                showToast('DEMO MODE — Trading with $10,000 virtual balance', 'info');
+                if (!opts.quiet) showToast('DEMO MODE — Trading with $10,000 virtual balance', 'info');
             }
 
             // Multipliers come from the server in real mode, from the local sim in demo.
@@ -4449,18 +4438,35 @@
             return m;
         }
 
+        // The sign-in is remembered in localStorage (until it expires on the
+        // server, 7 days), so returning players don't sign again. It only lets
+        // the page place bets: money still needs a fresh wallet signature.
+        const SESSION_KEY = (w) => 'btcgrid_session_' + w;
+        const LAST_WALLET_KEY = 'btcgrid_wallet';   // { type, address } of the remembered wallet
+        const MODE_KEY = 'btcgrid_mode';             // 'real' | 'demo'
         function storedSession(wallet) {
             try {
-                const s = JSON.parse(sessionStorage.getItem('btcgrid_session_' + wallet) || 'null');
+                const s = JSON.parse(localStorage.getItem(SESSION_KEY(wallet)) || sessionStorage.getItem(SESSION_KEY(wallet)) || 'null');
                 return s && s.expiresAt > Date.now() + 60000 ? s : null;
             } catch (e) { return null; }
         }
 
         function clearSession() {
             if (currentAddress) {
-                try { sessionStorage.removeItem('btcgrid_session_' + currentAddress); } catch (e) { /* ignore */ }
+                try { localStorage.removeItem(SESSION_KEY(currentAddress)); } catch (e) { /* ignore */ }
+                try { sessionStorage.removeItem(SESSION_KEY(currentAddress)); } catch (e) { /* ignore */ }
             }
             sessionToken = null;
+        }
+
+        function rememberWallet(type, address) {
+            try { localStorage.setItem(LAST_WALLET_KEY, JSON.stringify({ type, address })); } catch (e) { /* private mode */ }
+        }
+        function rememberedWallet() {
+            try { return JSON.parse(localStorage.getItem(LAST_WALLET_KEY) || 'null'); } catch (e) { return null; }
+        }
+        function forgetWallet() {
+            try { localStorage.removeItem(LAST_WALLET_KEY); } catch (e) { /* ignore */ }
         }
 
         async function signIn() {
@@ -4478,14 +4484,14 @@
                 const json = await res.json();
                 if (!res.ok) throw new Error(json.error || 'Login failed');
                 sessionToken = json.token;
-                try { sessionStorage.setItem('btcgrid_session_' + currentAddress, JSON.stringify({ token: json.token, expiresAt: json.expiresAt })); } catch (e) { /* private mode */ }
+                try { localStorage.setItem(SESSION_KEY(currentAddress), JSON.stringify({ token: json.token, expiresAt: json.expiresAt })); } catch (e) { /* private mode */ }
             }
             authServerSocket();
             await refreshAccount();
             setTimeout(afterSignInReferral, 300); // a ?ref= link: link the referrer (one signature)
         }
 
-        async function connectWallet(type) {
+        async function connectWallet(type, opts = {}) {
             const def = SOLANA_WALLETS[type];
             if (!def) return comingSoon(type === 'metamask' ? 'MetaMask' : type === 'rabby' ? 'Rabby' : type);
             const provider = def.get();
@@ -4515,7 +4521,8 @@
                 document.getElementById('walletMainText').textContent = short;
 
                 await signIn();
-                showModalStatus(def.name + ' connected and signed in', 'success');
+                rememberWallet(type, currentAddress);
+                if (!opts.quiet) showModalStatus(def.name + ' connected and signed in', 'success');
                 checkWalletTokenBalance();
                 loadHistory();
             } catch (error) {
@@ -4529,6 +4536,7 @@
         function disconnectWallet(silent) {
             try { if (currentProvider && currentProvider.disconnect) currentProvider.disconnect(); } catch (e) { /* ignore */ }
             clearSession();
+            forgetWallet();
             affiliateInfo = null;
             currentWallet = null;
             currentProvider = null;
@@ -4548,15 +4556,24 @@
         }
 
         // Reconnect silently if the wallet already trusts this site and the session is still valid.
+        // Returning visitor: the wallet already trusts this site and the sign-in
+        // is still valid, so reconnect without any popup and go back to the
+        // mode they last used (Real by default for a remembered wallet).
         async function tryEagerConnect() {
-            for (const type of Object.keys(SOLANA_WALLETS)) {
+            const last = rememberedWallet();
+            const order = Object.keys(SOLANA_WALLETS).sort((a, b) => (b === (last && last.type)) - (a === (last && last.type)));
+            for (const type of order) {
                 const provider = SOLANA_WALLETS[type].get();
                 if (!provider || !provider.connect) continue;
                 try {
                     const resp = await provider.connect({ onlyIfTrusted: true });
                     const pk = (resp && resp.publicKey) || provider.publicKey;
                     if (pk && storedSession(pk.toString())) {
-                        await connectWallet(type);
+                        await connectWallet(type, { quiet: true });
+                        if (sessionToken && lsGet(MODE_KEY) !== 'demo' && !isRealMode) {
+                            document.getElementById('modeToggle').checked = true;
+                            toggleTradingMode({ quiet: true });
+                        }
                         return;
                     }
                 } catch (e) { /* not trusted yet */ }
@@ -4989,19 +5006,10 @@
                     <p>Paid by the house on every settled bet (won or lost) of wallets that joined with your link, claimable in USDC to this wallet. $10,000 wagered = $${(10000 * a.rate).toFixed(0)} for you.</p></div>
                 <div class="aff-label">Your referral link</div>
                 <div class="aff-row">
-                    <input class="modal-form-input" id="affLink" readonly value="${escapeHtml(refLink(a.refToken))}">
+                    <input class="modal-form-input" id="affLink" readonly value="${escapeHtml(refLink(a.wallet))}">
                     <button class="aff-btn" onclick="copyText(document.getElementById('affLink').value, 'Link copied')">Copy</button>
                 </div>
-                ${a.code
-                    ? `<div class="aff-note">Your code: <b style="color:var(--text)">${escapeHtml(a.code)}</b> · locked</div>`
-                    : `<div class="aff-section">
-                        <div class="aff-label">Custom code <span style="color:var(--text-4)">(optional)</span></div>
-                        <div class="aff-row">
-                            <input class="modal-form-input" id="affCode" maxlength="20" placeholder="e.g. satoshi" autocomplete="off">
-                            <button class="aff-btn" onclick="setAffiliateCode()">Set code</button>
-                        </div>
-                        <div class="aff-note">3–20 letters or digits. Your link becomes …?ref=yourcode. It can't be changed later.</div>
-                    </div>`}
+                <div class="aff-note">Your link ends with your wallet address — it's yours from the moment you connect.</div>
                 <div class="aff-stats">
                     <div class="aff-stat"><div class="k">Referred wallets</div><div class="v">${a.referrals.total}${a.referrals.active ? ` <span style="font-size:11px;color:var(--text-3)">· ${a.referrals.active} played</span>` : ''}</div></div>
                     <div class="aff-stat"><div class="k">Their volume</div><div class="v">${usd(a.referredVolume)}</div></div>
@@ -5017,25 +5025,11 @@
                     ${a.referredBy
                         ? `<div class="aff-note" style="margin-top:0"><span style="color:var(--text);font-family:var(--mono)">${escapeHtml(shortAddr(a.referredBy))}</span> · linked permanently</div>`
                         : `<div class="aff-row">
-                            <input class="modal-form-input" id="affRefInput" maxlength="64" placeholder="Have a referral code?" autocomplete="off" value="${escapeHtml(lsGet(REF_KEY) || '')}">
+                            <input class="modal-form-input" id="affRefInput" maxlength="64" placeholder="Referrer's wallet address" autocomplete="off" value="${escapeHtml(lsGet(REF_KEY) || '')}">
                             <button class="aff-btn" onclick="applyReferralCode()">Apply</button>
                         </div>
                         <div class="aff-note">Optional and one time only — it can't be changed afterwards.</div>`}
                 </div>`;
-        }
-
-        async function setAffiliateCode() {
-            const code = (document.getElementById('affCode').value || '').trim();
-            if (!/^[a-zA-Z0-9]{3,20}$/.test(code)) return showToast('Code must be 3–20 letters or digits', 'error');
-            try {
-                const authMessage = actionMessage('set_referral_code', { Code: code });
-                const authSignature = await signText(authMessage);
-                await api('/affiliate/code', { method: 'POST', body: { code, authMessage, authSignature } });
-                showToast('Code set: ' + code, 'success');
-            } catch (err) {
-                if (!/reject|cancel|denied/i.test(err.message || '')) showToast(err.message, 'error');
-            }
-            renderAffiliate();
         }
 
         async function applyReferralCode() {
@@ -5091,7 +5085,7 @@
                 ]);
                 if (aff) affiliateInfo = aff;
                 pnlStats = stats;
-                pnlCanvas = await drawPnlCard(stats, (aff && aff.refToken) || currentAddress);
+                pnlCanvas = await drawPnlCard(stats, currentAddress);
                 box.innerHTML = '';
                 box.appendChild(pnlCanvas);
             } catch (err) {
@@ -5288,7 +5282,7 @@
 
         function pnlShareText() {
             const s = pnlStats || { pnl: 0, period: '7d' };
-            const link = refLink((affiliateInfo && affiliateInfo.refToken) || currentAddress);
+            const link = refLink(currentAddress);
             return `${usd(s.pnl, true)} on BTC Grid · ${PERIOD_LABEL[s.period] || ''}\nPlay the 10s × $10 BTC grid with my link: ${link}`;
         }
         function pnlBlob() { return new Promise((resolve) => pnlCanvas.toBlob(resolve, 'image/png')); }
@@ -5329,6 +5323,8 @@
         }
 
         tryEagerConnect();
+        // some wallet extensions appear a moment after load: try once more
+        setTimeout(() => { if (!currentAddress && rememberedWallet()) tryEagerConnect(); }, 1200);
     </script>
     
     <!-- Toast Container -->
