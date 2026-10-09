@@ -1602,7 +1602,9 @@
         }
         
         // Starting values per shape: length = columns (time), width = rows (price).
+        // Threshold has no shape (it bets any cell at or above the min multiplier).
         const PATTERN_PRESETS = {
+            threshold:       { minMult: 5 },
             line:            { minMult: 1, length: 6, width: 1 },
             checkerboard:    { minMult: 1, length: 6, width: 6 },
             pyramid:         { minMult: 1, length: 4, width: 8 },
@@ -1628,8 +1630,8 @@
             const preset = PATTERN_PRESETS[pattern];
             if (preset) {
                 updateAutoBetThreshold(preset.minMult);
-                updatePatternLength(preset.length);
-                updatePatternWidth(preset.width);
+                if (preset.length) updatePatternLength(preset.length);
+                if (preset.width) updatePatternWidth(preset.width);
             }
             
             // Update button states
