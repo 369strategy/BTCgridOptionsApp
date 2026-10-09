@@ -110,6 +110,14 @@ const Bet = sequelize.define('Bet', {
   ],
 });
 
+// Signed messages (login, withdraw, admin changes) are single-use: a signature
+// that was already accepted can't be sent again, even inside its 5-minute window.
+const UsedSignature = sequelize.define('UsedSignature', {
+  signature: { type: DataTypes.STRING, primaryKey: true },
+  action: { type: DataTypes.STRING, allowNull: false },
+  wallet: { type: DataTypes.STRING, allowNull: false },
+}, { tableName: 'used_signatures', updatedAt: false });
+
 // Every wallet that has signed in (admin player list).
 const Player = sequelize.define('Player', {
   wallet: { type: DataTypes.STRING, primaryKey: true },
@@ -131,5 +139,5 @@ async function init() {
 
 module.exports = {
   sequelize, init,
-  LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player,
+  LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player, UsedSignature,
 };

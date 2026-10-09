@@ -93,27 +93,69 @@ async function inspectVaultDeposit(signature) {
   const tx = await withRpc(c => c.getParsedTransaction(signature, {
     commitment: config.CONFIRM_COMMITMENT, maxSupportedTransactionVersion: 0,
   }));
+  const vaultAta = (await getAssociatedTokenAddress(USDC_MINT, owner)).toString();
+  return parseVaultDeposit(tx, owner.toString(), vaultAta);
+}
+
+/**
+ * Pure part of inspectVaultDeposit (tested against real mainnet transactions).
+ *   received: how much the vault's USDC account (vaultAta) went up — exact,
+ *             from raw token units, whatever instructions moved it
+ *   from:     the wallet whose USDC went DOWN (owner of the source token
+ *             account) — not the fee payer, which can be a third party that
+ *             sponsors fees. Rejected if there isn't exactly one such wallet
+ *             or it didn't sign the transaction.
+ */
+function parseVaultDeposit(tx, vaultOwner, vaultAta) {
   if (!tx) return { ok: false, pending: true, reason: 'Transaction not found (may still be confirming)' };
   if (tx.meta && tx.meta.err) return { ok: false, reason: 'Transaction failed on-chain' };
-
-  const logs = (tx.meta && tx.meta.logMessages || []).join('\n');
+  const meta = tx.meta || {};
+  const logs = (meta.logMessages || []).join('\n');
   const memoIx = (tx.transaction.message.instructions || [])
     .filter(ix => ix.program === 'spl-memo')
     .map(ix => (typeof ix.parsed === 'string' ? ix.parsed : JSON.stringify(ix.parsed)))
     .join('\n');
+  const memo = `${memoIx}\n${logs}`;
 
-  const destAta = (await getAssociatedTokenAddress(USDC_MINT, owner)).toString();
   const keys = tx.transaction.message.accountKeys;
-  const find = (arr) => (arr || []).find(b =>
-    b.mint === config.USDC_MINT && keys[b.accountIndex] && keys[b.accountIndex].pubkey.toString() === destAta);
-  const pre = find(tx.meta.preTokenBalances);
-  const post = find(tx.meta.postTokenBalances);
-  const preAmt = pre ? Number(pre.uiTokenAmount.uiAmount || 0) : 0;
-  const postAmt = post ? Number(post.uiTokenAmount.uiAmount || 0) : 0;
-  const received = Math.round((postAmt - preAmt) * 1e6) / 1e6;
+  const keyAt = (i) => keys[i] && (keys[i].pubkey ? keys[i].pubkey.toString() : String(keys[i]));
+  // raw USDC units per token account, before and after
+  const units = (arr) => {
+    const m = new Map();
+    for (const b of arr || []) {
+      if (b.mint === config.USDC_MINT) m.set(b.accountIndex, { owner: b.owner, raw: BigInt(b.uiTokenAmount.amount) });
+    }
+    return m;
+  };
+  const pre = units(meta.preTokenBalances);
+  const post = units(meta.postTokenBalances);
+  let receivedRaw = 0n;
+  const sent = new Map(); // owner -> raw units that left their token accounts
+  for (const idx of new Set([...pre.keys(), ...post.keys()])) {
+    const a = pre.get(idx), b = post.get(idx);
+    const delta = (b ? b.raw : 0n) - (a ? a.raw : 0n);
+    if (keyAt(idx) === vaultAta) { receivedRaw += delta; continue; }
+    const holder = (a && a.owner) || (b && b.owner);
+    if (delta < 0n && holder && holder !== vaultOwner) sent.set(holder, (sent.get(holder) || 0n) - delta);
+  }
+  const received = Number(receivedRaw) / 10 ** config.USDC_DECIMALS;
+  const feePayer = keyAt(0);
+  if (!(receivedRaw > 0n)) return { ok: true, from: feePayer, feePayer, received, memo }; // nothing came in
+  if (sent.size !== 1) {
+    return { ok: false, reason: sent.size ? 'USDC came from more than one wallet — contact support' : 'Could not identify the sending wallet' };
+  }
+  const [from] = sent.keys();
+  // The owner of the USDC must have signed. A transfer made by a delegate or a
+  // program on someone's behalf (owner didn't sign) is held for manual review
+  // rather than credited to a guess.
+  const signed = keys.some(k => k && k.signer && (k.pubkey ? k.pubkey.toString() : String(k)) === from);
+  if (!signed) return { ok: false, reason: 'The wallet that sent the USDC did not sign the transfer — contact support' };
+  return { ok: true, from, feePayer, received, memo };
+}
 
-  const from = keys[0].pubkey.toString(); // fee payer
-  return { ok: true, from, received, memo: `${memoIx}\n${logs}` };
+/** A base58 transaction signature (64 bytes). */
+function isTxSignature(s) {
+  try { return typeof s === 'string' && s.length <= 100 && bs58.decode(s).length === 64; } catch { return false; }
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +296,6 @@ function verifyWalletSignature({ wallet, message, signature }) {
 }
 
 module.exports = {
-  withRpc, vaultPubkey, isValidPubkey, inspectVaultDeposit, sendUsdc, signatureOutcome,
+  withRpc, vaultPubkey, isValidPubkey, inspectVaultDeposit, parseVaultDeposit, isTxSignature, sendUsdc, signatureOutcome,
   usdcBalanceOf, solBalanceOf, latestBlockhash, recentVaultSignatures, verifyWalletSignature,
 };

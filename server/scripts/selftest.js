@@ -103,6 +103,11 @@ function nextGrid() {
   const pt = await login(player);
   const at = await login(admin);
   ok(!!pt && !!at, 'player and admin can sign in');
+  const once = `BTC Grid\nAction: login\nWallet: ${P}\nTimestamp: ${Date.now()}`;
+  const onceSig = sign(player, once);
+  const l1 = await api('/auth/login', { method: 'POST', body: { wallet: P, message: once, signature: onceSig } });
+  const l2 = await api('/auth/login', { method: 'POST', body: { wallet: P, message: once, signature: onceSig } });
+  ok(l1.status === 200 && l2.status === 401, 'a login signature works once — replaying it is refused');
 
   console.log('\nodds + bet validation');
   const { hello, grid } = await nextGrid();
@@ -253,6 +258,10 @@ function nextGrid() {
   ok(setE.status === 200 && setE.body.houseEdge === 0.65 && cfg.houseEdge === 0.65, `admin sets the house edge to 65% (public config now ${cfg.houseEdge})`);
   const back = await api('/admin/house-edge', { method: 'POST', token: at, body: edgeBody(edge0) });
   ok(back.status === 200 && back.body.houseEdge === edge0, `house edge restored to ${Math.round(edge0 * 100)}%`);
+  const sameSig = edgeBody(edge0);
+  const s1 = await api('/admin/house-edge', { method: 'POST', token: at, body: sameSig });
+  const s2 = await api('/admin/house-edge', { method: 'POST', token: at, body: sameSig });
+  ok(s1.status === 200 && s2.status === 401, 'an approved admin signature can\'t be sent a second time');
 
   console.log('\nledger invariant');
   const total = Number(await db.LedgerEntry.sum('amount')) || 0;

@@ -82,6 +82,9 @@ router.post('/auth/login', byIp(20), wrap(async (req, res) => {
   if (!auth.hasLine(message, 'Action', 'login')) return res.status(401).json({ error: 'Not a login message' });
   const check = solana.verifyWalletSignature({ wallet, message, signature });
   if (!check.ok) return res.status(401).json({ error: check.reason });
+  if (!await auth.consumeSignature(String(signature), 'login', wallet)) {
+    return res.status(401).json({ error: 'This sign-in was already used — please sign again' });
+  }
   const session = auth.issueToken(wallet);
   admin.recordLogin(wallet).catch(err => console.error(`[api] recording login failed: ${err.message}`));
   res.json({ ...session, wallet, isAdmin: config.ADMIN_WALLETS.includes(wallet) });
@@ -108,15 +111,16 @@ router.get('/bets/history', auth.requireSession, wrap(async (req, res) => {
 
 router.post('/deposits', auth.requireSession, byWallet(30), wrap(async (req, res) => {
   const { signature } = req.body || {};
-  if (typeof signature !== 'string' || signature.length < 60 || signature.length > 100) {
-    return res.status(400).json({ error: 'Invalid signature' });
+  if (!solana.isTxSignature(signature)) return res.status(400).json({ error: 'Invalid signature' });
+  if (!await deposits.recordPending({ wallet: req.wallet, signature })) {
+    return res.status(429).json({ error: 'Too many deposits still confirming — wait for them to finish' });
   }
-  await deposits.recordPending({ wallet: req.wallet, signature });
   const r = await deposits.creditDeposit({ signature, expectedFrom: req.wallet });
   res.json(r);
 }));
 
 router.get('/deposits/:signature', auth.requireSession, byWallet(120), wrap(async (req, res) => {
+  if (!solana.isTxSignature(req.params.signature)) return res.status(400).json({ error: 'Invalid signature' });
   const r = await deposits.creditDeposit({ signature: req.params.signature, expectedFrom: req.wallet });
   res.json(r);
 }));

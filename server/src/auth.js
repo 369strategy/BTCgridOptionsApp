@@ -9,9 +9,11 @@
 // message that binds the action and its exact target — perfect-nature's
 // requireSignedAction pattern — so a stolen session token alone can't withdraw,
 // and a captured signature can't be replayed against a different amount.
+// Every signed message (login included) is single-use (used_signatures).
 const crypto = require('crypto');
 const config = require('./config');
 const solana = require('./solana');
+const { UsedSignature } = require('./db');
 
 const SECRET = config.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 if (!config.SESSION_SECRET) {
@@ -58,8 +60,22 @@ function requireSession(req, res, next) {
  * the request's exact target. Requires a session too, and the signature must be
  * from the session's wallet.
  */
+/**
+ * Mark a verified signature as used. False if it was used before (replay).
+ * Call only AFTER the signature has been verified.
+ */
+async function consumeSignature(signature, action, wallet) {
+  try {
+    await UsedSignature.create({ signature, action, wallet });
+    return true;
+  } catch (err) {
+    if (err.name === 'SequelizeUniqueConstraintError') return false;
+    throw err;
+  }
+}
+
 function requireSignedAction(action, binding) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const { authMessage, authSignature } = req.body || {};
     if (!authMessage || !authSignature) {
       return res.status(401).json({ error: 'authMessage and authSignature required' });
@@ -72,6 +88,14 @@ function requireSignedAction(action, binding) {
     }
     const check = solana.verifyWalletSignature({ wallet: req.wallet, message: authMessage, signature: authSignature });
     if (!check.ok) return res.status(401).json({ error: check.reason });
+    try {
+      if (!await consumeSignature(String(authSignature), action, req.wallet)) {
+        return res.status(401).json({ error: 'This signature was already used — please sign again' });
+      }
+    } catch (err) {
+      console.error(`[auth] recording signature failed: ${err.message}`);
+      return res.status(500).json({ error: 'Could not verify the signature — try again' });
+    }
     next();
   };
 }
@@ -88,4 +112,4 @@ function hasLine(message, key, value) {
   return message.split('\n').some(l => l === `${key}: ${value}`);
 }
 
-module.exports = { issueToken, verifyToken, requireSession, requireSignedAction, requireAdmin, hasLine };
+module.exports = { issueToken, verifyToken, requireSession, requireSignedAction, requireAdmin, hasLine, consumeSignature };

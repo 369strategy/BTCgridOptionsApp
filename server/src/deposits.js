@@ -8,6 +8,7 @@ const solana = require('./solana');
 const { events } = require('./game');
 
 const FINALIZE_EXPIRY_MS = 30 * 60 * 1000;
+const MAX_PENDING_PER_WALLET = 5;
 const warned = new Set();
 
 /**
@@ -60,17 +61,28 @@ async function creditDeposit({ signature, expectedFrom }) {
   return { status: 'credited', amount, kind, wallet: tx.from };
 }
 
-/** Record a deposit the browser broadcast, so the server finishes it. */
+/**
+ * Record a deposit the browser broadcast, so the server finishes it. False if
+ * this wallet already has too many unfinished reports (keeps junk signatures
+ * from piling up RPC work).
+ */
 async function recordPending({ wallet, signature }) {
+  if (await PendingDeposit.findByPk(signature)) return true;
+  if (await PendingDeposit.count({ where: { wallet, status: 'pending' } }) >= MAX_PENDING_PER_WALLET) return false;
   await PendingDeposit.findOrCreate({ where: { signature }, defaults: { wallet, status: 'pending' } });
+  return true;
 }
 
-/** Background: credit reported deposits once they finalize. */
+/**
+ * Background: credit reported deposits once they finalize. Always to the
+ * wallet whose USDC actually moved — never to whoever reported the signature
+ * (someone watching the vault could report other people's deposits first).
+ */
 async function finalizePending() {
   const pendings = await PendingDeposit.findAll({ where: { status: 'pending' } });
   for (const p of pendings) {
     try {
-      const r = await creditDeposit({ signature: p.signature, expectedFrom: p.wallet });
+      const r = await creditDeposit({ signature: p.signature });
       if (r.status === 'credited' || r.status === 'already') {
         await p.update({ status: 'completed' });
       } else if (r.status === 'rejected') {
