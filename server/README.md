@@ -27,7 +27,8 @@ Runs on Railway (project `btc-grid`, service `btc-grid`, Postgres), serves
   simulated symmetrically. No win is paid on a line that kept moving during a
   feed outage — those bets are refunded.
   Bets are priced off a simulation at most 500ms old; a player is filled at
-  `min(what they saw, fresh quote)`, and refused if the quote fell >20%.
+  `min(what they saw, fresh quote)` — never refused because the odds moved —
+  and 400ms later re-priced once more, keeping the lower multiplier (last look).
 - **Bets** — need a wallet-signed session. The server checks timing (column must
   start ≥10s out), stake limits, the player's balance, and house exposure, and
   settles every bet from its own TWAP points, storing the touching point (wins)

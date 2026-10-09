@@ -145,20 +145,18 @@ function nextGrid() {
     { cell: 'garbage', amount: 5 },
     { cell: likely.k, amount: 0.5 },
     { cell: likely.k, amount: 99999 },
-    { cell: later.k, amount: 5, seenMult: later.m * 3 },
   ] } });
   const reasons = r1.body.rejected.map(r => r.reason).join(' | ');
-  ok(r1.body.accepted.length === 0 && r1.body.rejected.length === 5, `all 5 invalid bets rejected: ${reasons}`);
+  ok(r1.body.accepted.length === 0 && r1.body.rejected.length === 4, `all 4 invalid bets rejected: ${reasons}`);
   ok(/Too late/.test(reasons), 'closing column refused');
   ok(/Invalid cell/.test(reasons), 'malformed cell refused');
   ok(/Stake must be/.test(reasons), 'out-of-range stake refused');
-  ok(/Odds changed/.test(reasons), 'inflated client multiplier (3x the quote) refused');
 
   const lowerSeen = Math.max(1.01, Math.floor(later.m * 0.9 * 100) / 100);
   const t2 = Date.now();
   const r2 = await api('/bets', { method: 'POST', token: pt, body: { bets: [
     { cell: likely.k, amount: 20, seenMult: likely.m },
-    { cell: longShot.k, amount: 10 },
+    { cell: longShot.k, amount: 10, seenMult: longShot.m * 3 },
     { cell: later.k, amount: 10, seenMult: lowerSeen },
   ] } });
   const held = Date.now() - t2;
@@ -166,6 +164,9 @@ function nextGrid() {
   ok(held >= 400 && Array.isArray(r2.body.repriced)
     && r2.body.repriced.every(x => x.to < x.from && r2.body.accepted.some(b => b.cell === x.cell && b.multiplier === x.to)),
     `last look: answered after the 400ms hold (${held}ms), ${r2.body.repriced.length} multiplier(s) lowered, none raised or rejected`);
+  const inflated = r2.body.accepted.find(b => b.cell === longShot.k);
+  ok(inflated && inflated.multiplier < longShot.m * 3 - 1e-9,
+    `inflated client multiplier (${(longShot.m * 3).toFixed(2)}x) is accepted but paid only the server's odds (${inflated && inflated.multiplier}x)`);
   const likelyBet = r2.body.accepted.find(b => b.cell === likely.k);
   ok(likelyBet && likelyBet.multiplier <= likely.m + 1e-9, `filled at no more than the multiplier seen (${likely.m}x → ${likelyBet && likelyBet.multiplier}x)`);
   const lowered = r2.body.accepted.find(b => b.cell === later.k);

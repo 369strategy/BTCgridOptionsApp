@@ -66,10 +66,8 @@ const GAME = {
   MAX_MULT: 100,
   MAX_PROB: 0.95,
 
-  // A bet is accepted at min(what the player saw, fresh server quote). If the
-  // fresh quote fell below this fraction of what they saw, it's rejected as
-  // "odds changed" instead of silently filling them at a much worse price.
-  QUOTE_SLIPPAGE_FLOOR: 0.8,
+  // A bet is accepted at min(what the player saw, fresh server quote), never
+  // refused because the odds moved (game.js placeBets).
   // Last look. An accepted bet is held this long and re-priced with the data
   // that arrived meanwhile; if the odds got worse it keeps the LOWER
   // multiplier (never rejected, never raised). Someone with a faster Binance

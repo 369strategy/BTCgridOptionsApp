@@ -168,13 +168,11 @@ async function placeBets(wallet, requests) {
     const quote = sim.quotes[cell];
     if (!quote) { rejected.push({ cell, reason: 'No odds for that cell right now' }); continue; }
     const seenMult = Number(r.seenMult);
+    // Filled at min(what the player saw, fresh quote), however far the odds
+    // moved — a bet is never refused for that (and the last look below can
+    // only lower it further).
     let mult = quote.mult;
-    if (Number.isFinite(seenMult) && seenMult > 0) {
-      if (quote.mult < seenMult * GAME.QUOTE_SLIPPAGE_FLOOR) {
-        rejected.push({ cell, reason: `Odds changed (${seenMult.toFixed(2)}x → ${quote.mult.toFixed(2)}x)` }); continue;
-      }
-      mult = Math.min(seenMult, quote.mult);
-    }
+    if (Number.isFinite(seenMult) && seenMult > 0) mult = Math.min(seenMult, quote.mult);
     mult = floor2(mult);
     if (mult < GAME.MIN_MULT) { rejected.push({ cell, reason: 'Odds too low' }); continue; }
     candidates.push({ cell, ...parsed, amount, mult, prob: quote.prob });
