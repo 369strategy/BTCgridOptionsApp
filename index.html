@@ -301,6 +301,8 @@
         .auto-bet-x { font-family: var(--mono); color: var(--text-3); margin-right: 2px; }
 
         .pattern-section { margin-top: 6px; }
+        .auto-bet-min-row { margin-top: 6px; }
+        .auto-bet-switch-row { margin-top: 6px; }
         .pattern-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
         .pattern-btn {
             display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -403,6 +405,8 @@
             font-size: 11px; font-weight: 700;
             object-fit: cover;
         }
+        /* Bare marks (SOL, ETH) are not square: fit them inside the circle. */
+        .asset-option-icon.mark { object-fit: contain; padding: 4px; box-sizing: border-box; }
         .asset-option.soon .asset-option-icon { filter: grayscale(1); }
         .asset-option-name { font-weight: 600; }
         .asset-option-pair { color: var(--text-3); font-size: 12px; margin-left: -6px; }
@@ -440,8 +444,6 @@
         }
         .change-badge.positive { color: var(--green); background: var(--green-bg); }
         .change-badge.negative { color: var(--red); background: var(--red-bg); }
-        .price-sub { display: flex; gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--text-3); }
-        #livePrice { color: var(--text-4); }
 
         .stats-grid {
             display: flex; gap: 22px;
@@ -520,13 +522,6 @@
         .mult-scale span { font-family: var(--mono); font-size: 10px; }
         .mult-scale i { display: inline-block; width: 10px; height: 6px; border-radius: 2px; }
         #chart { flex: 1; width: 100%; min-height: 0; display: block; cursor: default; }
-
-        .footer {
-            font-size: 11px;
-            color: var(--text-4) !important;
-            text-align: center;
-            padding: 0 0 2px;
-        }
 
         /* ---------------- Responsive ---------------- */
         @media (max-width: 1280px) {
@@ -888,14 +883,7 @@
                         </div>
                         <button class="bet-btn" onclick="adjustBet(+10)" aria-label="Increase bet by 10">+</button>
                     </div>
-                    <div class="quick-bets">
-                        <button class="quick-btn" onclick="setBet(10)">10</button>
-                        <button class="quick-btn" onclick="setBet(50)">50</button>
-                        <button class="quick-btn" onclick="setBet(100)">100</button>
-                        <button class="quick-btn" onclick="setBet(500)">500</button>
-                        <button class="quick-btn" onclick="setBet(1000)">1K</button>
-                        <button class="quick-btn" onclick="setBet(balance)">Max</button>
-                    </div>
+                    <div class="quick-bets" id="quickBets"></div>
                     <div class="bet-steps">
                         <button class="ghost-btn" onclick="adjustBet(-100)">−100</button>
                         <button class="ghost-btn" onclick="adjustBet(+100)">+100</button>
@@ -917,19 +905,6 @@
                             <span class="section-label">Automation</span>
                             <span class="summary-hint">Auto-bet &amp; patterns</span>
                         </summary>
-                        <div class="auto-bet-row">
-                            <span class="auto-bet-label">Auto-bet</span>
-                            <button class="auto-bet-toggle" id="autoBetToggle" onclick="toggleAutoBet()">OFF</button>
-                        </div>
-                        <div class="auto-bet-row">
-                            <span class="auto-bet-threshold-label">Min multiplier</span>
-                            <div class="auto-bet-input-group">
-                                <button class="auto-bet-adj-btn" onclick="adjustAutoBetThreshold(-1)">−</button>
-                                <input type="number" class="auto-bet-input" id="autoBetThreshold" value="5" min="1" max="50" step="1" onchange="updateAutoBetThreshold(this.value)">
-                                <span class="auto-bet-x">x</span>
-                                <button class="auto-bet-adj-btn" onclick="adjustAutoBetThreshold(1)">+</button>
-                            </div>
-                        </div>
                         <div class="pattern-section">
                             <div class="pattern-buttons">
                                 <button class="pattern-btn" id="patternThreshold" onclick="setPattern('threshold')" title="Bet on any cell above the multiplier threshold">
@@ -941,36 +916,49 @@
                                 <button class="pattern-btn" id="patternCheckerboard" onclick="setPattern('checkerboard')" title="Alternating checkerboard">
                                     <span class="pattern-preview">▚</span>Checker
                                 </button>
-                                <button class="pattern-btn" id="patternPyramid" onclick="setPattern('pyramid')" title="Expanding pyramid: 1→3→5 cells">
+                                <button class="pattern-btn" id="patternPyramid" onclick="setPattern('pyramid')" title="Expanding pyramid: 1 row growing to the width">
                                     <span class="pattern-preview">△</span>Pyramid
                                 </button>
-                                <button class="pattern-btn" id="patternInversePyramid" onclick="setPattern('inverse_pyramid')" title="Contracting pyramid: 5→3→1 cells">
+                                <button class="pattern-btn" id="patternInversePyramid" onclick="setPattern('inverse_pyramid')" title="Contracting pyramid: the width shrinking to 1 row">
                                     <span class="pattern-preview">▽</span>Inv-pyr
                                 </button>
                             </div>
-                            <div class="pattern-dimensions">
-                                <div class="dimension-control">
-                                    <div class="row-between">
-                                        <span class="dimension-label">Length</span>
-                                        <span class="dimension-value" id="lengthValue">5</span>
-                                    </div>
-                                    <input type="range" class="dimension-slider" id="patternLengthSlider"
-                                           min="1" max="12" value="5"
-                                           oninput="updatePatternLength(this.value)">
+                        </div>
+                        <div class="auto-bet-row auto-bet-min-row">
+                            <span class="auto-bet-threshold-label">Min multiplier</span>
+                            <div class="auto-bet-input-group">
+                                <button class="auto-bet-adj-btn" onclick="adjustAutoBetThreshold(-1)">−</button>
+                                <input type="number" class="auto-bet-input" id="autoBetThreshold" value="5" min="1" max="50" step="1" onchange="updateAutoBetThreshold(this.value)">
+                                <span class="auto-bet-x">x</span>
+                                <button class="auto-bet-adj-btn" onclick="adjustAutoBetThreshold(1)">+</button>
+                            </div>
+                        </div>
+                        <div class="pattern-dimensions">
+                            <div class="dimension-control">
+                                <div class="row-between">
+                                    <span class="dimension-label">Length</span>
+                                    <span class="dimension-value" id="lengthValue">5</span>
                                 </div>
-                                <div class="dimension-control">
-                                    <div class="row-between">
-                                        <span class="dimension-label">Width</span>
-                                        <span class="dimension-value" id="widthValue">3</span>
-                                    </div>
-                                    <input type="range" class="dimension-slider" id="patternWidthSlider"
-                                           min="1" max="11" value="3"
-                                           oninput="updatePatternWidth(this.value)">
+                                <input type="range" class="dimension-slider" id="patternLengthSlider"
+                                       min="1" max="12" value="5"
+                                       oninput="updatePatternLength(this.value)">
+                            </div>
+                            <div class="dimension-control">
+                                <div class="row-between">
+                                    <span class="dimension-label">Width</span>
+                                    <span class="dimension-value" id="widthValue">3</span>
                                 </div>
+                                <input type="range" class="dimension-slider" id="patternWidthSlider"
+                                       min="1" max="11" value="3"
+                                       oninput="updatePatternWidth(this.value)">
                             </div>
                         </div>
                         <div class="auto-bet-stats" id="autoBetStats">
                             Bets placed <span id="autoBetCount">0</span> · Pattern <span id="patternName">None</span>
+                        </div>
+                        <div class="auto-bet-row auto-bet-switch-row">
+                            <span class="auto-bet-label">Auto-bet</span>
+                            <button class="auto-bet-toggle" id="autoBetToggle" onclick="toggleAutoBet()">OFF</button>
                         </div>
                     </details>
                 </div>
@@ -994,7 +982,7 @@
                         <div class="asset-icon">₿</div>
                         <div class="asset-text">
                             <h1 id="feedLabel">BTC/USDT</h1>
-                            <span class="asset-sub">5s TWAP · 10s × $10 grid</span>
+                            <span class="asset-sub">10s × $10 grid</span>
                         </div>
                         <svg class="asset-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
@@ -1007,13 +995,13 @@
                             <svg class="asset-option-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
                         </div>
                         <div class="asset-option soon" role="option" aria-disabled="true">
-                            <img class="asset-option-icon" src="assets/logos/solana.svg" alt="" width="22" height="22">
+                            <img class="asset-option-icon mark" src="assets/logos/solana.svg" alt="" width="22" height="22">
                             <span class="asset-option-name">SOL</span>
                             <span class="asset-option-pair">/USDT</span>
                             <span class="soon-badge">Coming soon</span>
                         </div>
                         <div class="asset-option soon" role="option" aria-disabled="true">
-                            <span class="asset-option-icon">P</span>
+                            <img class="asset-option-icon" src="assets/logos/pump.jpg" alt="" width="22" height="22">
                             <span class="asset-option-name">PUMP</span>
                             <span class="asset-option-pair">/USDT</span>
                             <span class="soon-badge">Coming soon</span>
@@ -1025,7 +1013,7 @@
                             <span class="soon-badge">Coming soon</span>
                         </div>
                         <div class="asset-option soon" role="option" aria-disabled="true">
-                            <img class="asset-option-icon" src="assets/logos/ethereum.svg" alt="" width="22" height="22">
+                            <img class="asset-option-icon mark" src="assets/logos/ethereum.svg" alt="" width="22" height="22">
                             <span class="asset-option-name">ETH</span>
                             <span class="asset-option-pair">/USDT</span>
                             <span class="soon-badge">Coming soon</span>
@@ -1034,14 +1022,10 @@
                 </div>
 
                 <div class="price-section">
-                    <div class="price-label">BTC Price · 5s TWAP</div>
+                    <div class="price-label">BTC Price</div>
                     <div class="price-line">
                         <div class="price-value" id="currentPrice">$--,---.--</div>
                         <span class="change-badge positive" id="priceChange">+0.00%</span>
-                    </div>
-                    <div class="price-sub">
-                        <span id="priceChangeAbs">$0.00</span>
-                        <span id="livePrice" title="Latest Binance trade. Bets are decided on the 5-second TWAP, not on single trades."></span>
                     </div>
                 </div>
 
@@ -1084,7 +1068,7 @@
             <div class="chart-container">
                 <div class="chart-header">
                     <div class="chart-header-left">
-                        <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> · 5s TWAP · 10 sec × $10</h2>
+                        <h2 class="chart-title"><span id="chartFeedLabel">BTC-USDT</span> · 10 sec × $10</h2>
                         <div class="pan-controls" role="group" aria-label="Move the view">
                             <button class="pan-btn" onclick="panView(1, 0)" title="Look higher (↑ or scroll)" aria-label="Look higher">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
@@ -1102,7 +1086,7 @@
                         </div>
                     </div>
                     <div class="chart-legend">
-                        <div class="legend-item"><span class="legend-swatch line"></span>5s TWAP</div>
+                        <div class="legend-item"><span class="legend-swatch line"></span>Price</div>
                         <div class="legend-item"><span class="legend-swatch live"></span>Live trades</div>
                         <div class="legend-item"><span class="legend-swatch bet"></span>Your bet</div>
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
@@ -1117,9 +1101,6 @@
                 <canvas id="chart"></canvas>
             </div>
 
-            <footer class="footer">
-                DEMO MODE • Binance • EMA Vol (60s) + Jumps • 50% House Edge • Click or Drag to select cells
-            </footer>
         </main>
     </div>
 
@@ -1515,22 +1496,55 @@
             lossesEl.textContent = totalLosses;
         }
         
-        // Bet control functions
+        // Bet control functions. Real money is capped at the server's max stake
+        // (realMaxBet, $100); demo is only limited by the virtual balance.
+        let realMaxBet = 100;
+        const QUICK_BETS = {
+            demo: [[10, '10'], [50, '50'], [100, '100'], [500, '500'], [1000, '1K'], ['max', 'Max']],
+            real: [[1, '$1'], [5, '$5'], [10, '$10'], [25, '$25'], [50, '$50'], [100, '$100']],
+        };
+        function betCap() {
+            return Math.min(balance, isRealMode ? realMaxBet : Infinity);
+        }
+        function clampBet(amount) {
+            return Math.max(1, Math.min(betCap(), amount));
+        }
+        function renderQuickBets() {
+            const box = document.getElementById('quickBets');
+            if (!box) return;
+            box.innerHTML = '';
+            for (const [amount, label] of QUICK_BETS[isRealMode ? 'real' : 'demo']) {
+                const b = document.createElement('button');
+                b.className = 'quick-btn';
+                b.textContent = label;
+                b.onclick = () => setBet(amount === 'max' ? balance : amount);
+                box.appendChild(b);
+            }
+            if (betInput) betInput.max = isRealMode ? realMaxBet : 10000;
+        }
+        // Mode switch / new cap / balance change: keep the stake within the cap.
+        function applyBetCap() {
+            if (!betInput) initTradingUI();
+            renderQuickBets();
+            if (isRealMode && betSize > realMaxBet) betSize = realMaxBet;
+            if (betInput) betInput.value = betSize;
+        }
+
         function adjustBet(amount) {
             if (!betInput) initTradingUI();
-            betSize = Math.max(1, Math.min(balance, betSize + amount));
+            betSize = clampBet(betSize + amount);
             if (betInput) betInput.value = betSize;
         }
         
         function setBet(amount) {
             if (!betInput) initTradingUI();
-            betSize = Math.max(1, Math.min(balance, amount));
+            betSize = clampBet(amount);
             if (betInput) betInput.value = betSize;
         }
         
         function updateBetSize(value) {
             if (!betInput) initTradingUI();
-            betSize = Math.max(1, Math.min(balance, parseInt(value) || 1));
+            betSize = clampBet(parseInt(value) || 1);
             if (betInput) betInput.value = betSize;
         }
         
@@ -1583,11 +1597,6 @@
         function updateHouseEdge(value) {
             houseEdge = parseInt(value) / 100;
             document.getElementById('houseEdgeDisplay').textContent = value + '%';
-            // Update footer only in demo mode
-            const footer = document.querySelector('.footer');
-            if (footer && (typeof isRealMode === 'undefined' || !isRealMode)) {
-                footer.innerHTML = 'DEMO MODE • ' + escapeHtml(feedLabel) + ' • EMA Vol (60s) + Jumps • ' + value + '% House Edge • Click or Drag to select cells';
-            }
             console.log('House edge set to ' + value + '%');
         }
         
@@ -1619,6 +1628,14 @@
             document.getElementById('autoBetThreshold').value = autoBetThreshold;
         }
         
+        // Starting values per shape: length = columns (time), width = rows (price).
+        const PATTERN_PRESETS = {
+            line:            { minMult: 1, length: 6, width: 1 },
+            checkerboard:    { minMult: 1, length: 6, width: 6 },
+            pyramid:         { minMult: 1, length: 4, width: 8 },
+            inverse_pyramid: { minMult: 1, length: 4, width: 8 },
+        };
+
         // Pattern selector
         function setPattern(pattern) {
             // Toggle off if clicking same pattern
@@ -1632,6 +1649,15 @@
             }
             
             autoBetPattern = pattern;
+
+            // Each shape starts from its preset (min multiplier, length, width);
+            // the controls below can still change it afterwards.
+            const preset = PATTERN_PRESETS[pattern];
+            if (preset) {
+                updateAutoBetThreshold(preset.minMult);
+                updatePatternLength(preset.length);
+                updatePatternWidth(preset.width);
+            }
             
             // Update button states
             document.querySelectorAll('.pattern-btn').forEach(btn => btn.classList.remove('active'));
@@ -1685,8 +1711,20 @@
             
             const cells = [];
             
-            // Calculate spread from width (width=1 → spread=0, width=3 → spread=1, width=5 → spread=2)
-            const halfWidth = Math.floor((patternWidth - 1) / 2);
+            // n rows around the price: width 1 = the price row, 3 = one above and
+            // below, an even width puts the extra row above.
+            const rowsFor = (n) => {
+                const below = Math.floor((n - 1) / 2);
+                const rows = [];
+                for (let p = -below; p <= n - 1 - below; p++) rows.push(p);
+                return rows;
+            };
+            // rows in column t: 1 at the narrow end growing to patternWidth at the wide end
+            const taperRows = (t, growing) => {
+                const progress = (t - 2) / Math.max(1, patternLength - 1);
+                const f = growing ? progress : 1 - progress;
+                return rowsFor(1 + Math.round(f * (patternWidth - 1)));
+            };
             const endTime = 2 + patternLength - 1; // Start at t=2, go for patternLength cells
             
             switch(autoBetPattern) {
@@ -1694,7 +1732,7 @@
                     // Horizontal line - uses both length and width
                     for (let t = 2; t <= endTime; t++) {
                         const cellTs = currentCellStart + t * msPerCell;
-                        for (let p = -halfWidth; p <= halfWidth; p++) {
+                        for (const p of rowsFor(patternWidth)) {
                             const priceLevel = centerPrice + p * pricePerCell;
                             cells.push(`${cellTs}_${priceLevel}`);
                         }
@@ -1704,7 +1742,7 @@
                 case 'checkerboard':
                     // Alternating cells in a checkerboard pattern
                     for (let t = 2; t <= endTime; t++) {
-                        for (let p = -halfWidth; p <= halfWidth; p++) {
+                        for (const p of rowsFor(patternWidth)) {
                             if ((t + p) % 2 === 0) {
                                 const cellTs = currentCellStart + t * msPerCell;
                                 const priceLevel = centerPrice + p * pricePerCell;
@@ -1718,10 +1756,7 @@
                     // Expanding pyramid: starts narrow, expands to max width
                     for (let t = 2; t <= endTime; t++) {
                         const cellTs = currentCellStart + t * msPerCell;
-                        // Calculate spread for this time step (grows from 0 to halfWidth)
-                        const progress = (t - 2) / Math.max(1, patternLength - 1);
-                        const spread = Math.min(halfWidth, Math.round(progress * halfWidth));
-                        for (let p = -spread; p <= spread; p++) {
+                        for (const p of taperRows(t, true)) {
                             const priceLevel = centerPrice + p * pricePerCell;
                             cells.push(`${cellTs}_${priceLevel}`);
                         }
@@ -1732,10 +1767,7 @@
                     // Contracting pyramid: starts wide, contracts to narrow
                     for (let t = 2; t <= endTime; t++) {
                         const cellTs = currentCellStart + t * msPerCell;
-                        // Calculate spread for this time step (shrinks from halfWidth to 0)
-                        const progress = (t - 2) / Math.max(1, patternLength - 1);
-                        const spread = Math.max(0, halfWidth - Math.round(progress * halfWidth));
-                        for (let p = -spread; p <= spread; p++) {
+                        for (const p of taperRows(t, false)) {
                             const priceLevel = centerPrice + p * pricePerCell;
                             cells.push(`${cellTs}_${priceLevel}`);
                         }
@@ -2174,7 +2206,6 @@
         const tradeCountEl = document.getElementById('tradeCount');
         const currentPriceEl = document.getElementById('currentPrice');
         const priceChangeEl = document.getElementById('priceChange');
-        const priceChangeAbsEl = document.getElementById('priceChangeAbs');
         const high24hEl = document.getElementById('high24h');
         const low24hEl = document.getElementById('low24h');
         const volume24hEl = document.getElementById('volume24h');
@@ -2482,7 +2513,6 @@
         function updatePriceDisplay() {
             const gp = gamePrice();
             if (!gp) return;
-            if (price) document.getElementById('livePrice').textContent = 'Live $' + formatPrice(price);
             // The TWAP is continuous: repaint only when the cents change, and
             // flash green/red only on moves of $1+ (not on every tiny step).
             const cents = Math.round(gp * 100) / 100;
@@ -2499,10 +2529,8 @@
 
             if (startPrice) {
                 const change = ((gp - startPrice) / startPrice) * 100;
-                const changeAbs = gp - startPrice;
                 priceChangeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
                 priceChangeEl.className = `change-badge ${change >= 0 ? 'positive' : 'negative'}`;
-                priceChangeAbsEl.textContent = `$${changeAbs >= 0 ? '+' : ''}${formatPrice(changeAbs)}`;
             }
             
             volatilityEl.textContent = (estimatedVolatility * 100).toFixed(0) + '%';
@@ -2636,7 +2664,7 @@
             const firstCellMark = Math.floor(timeStart / msPerCell) * msPerCell;
             const firstPriceMark = Math.floor(minPrice / pricePerCell) * pricePerCell;
 
-            // Grid lines (hairline)
+            // Grid lines (hairline): time columns faint, price rows a little stronger
             ctx.lineWidth = 1;
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.045)';
             ctx.beginPath();
@@ -2646,6 +2674,9 @@
                 ctx.moveTo(x, padding.top);
                 ctx.lineTo(x, bottom);
             }
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.085)';
+            ctx.beginPath();
             for (let p = firstPriceMark; p <= maxPrice + pricePerCell; p += pricePerCell) {
                 const y = Math.round(priceToY(p)) + 0.5;
                 if (y < padding.top || y > bottom) continue;
@@ -2679,7 +2710,7 @@
                 const y = priceToY(p);
                 if (y < padding.top + 6 || y > bottom - 6) continue;
                 const d = Math.min(1, Math.abs(p - centerPrice) / (totalPriceRange / 2));
-                ctx.fillStyle = `rgba(161, 161, 170, ${0.35 + (1 - d) * 0.45})`;
+                ctx.fillStyle = `rgba(161, 161, 170, ${0.5 + (1 - d) * 0.45})`;
                 ctx.fillText('$' + formatPrice(p), right + 10, y);
             }
 
@@ -3166,8 +3197,9 @@
 
         function setFeedLabel(label) {
             feedLabel = label;
-            document.getElementById('feedLabel').textContent = label;
-            document.getElementById('chartFeedLabel').textContent = label.replace('/', '-');
+            const pair = label.replace(/\s+(SPOT|PERP)$/i, ''); // just "BTC/USDT"
+            document.getElementById('feedLabel').textContent = pair;
+            document.getElementById('chartFeedLabel').textContent = pair.replace('/', '-');
         }
 
         // Keep serverNow() aligned with the server clock (cells and settlement use it).
@@ -3237,6 +3269,7 @@
             syncClock(msg.st);
             setFeedLabel(msg.feed.label);
             serverHouseEdge = msg.game.houseEdge;
+            if (msg.game.maxBet > 0) { realMaxBet = msg.game.maxBet; applyBetCap(); }
             if (isRealMode) {
                 document.getElementById('houseEdgeDisplay').textContent = Math.round(serverHouseEdge * 100) + '% (server)';
             }
@@ -3863,6 +3896,7 @@
         // TRADING MODE STATE (DEMO vs REAL)
         // ================================================
         let isRealMode = false;  // false = demo, true = real money
+        renderQuickBets();       // needs isRealMode, so not in initTradingUI
         const DEMO_STARTING_BALANCE = 10000;
 
         // Demo Mode State (separate from real)
@@ -3921,23 +3955,13 @@
                 document.getElementById('houseEdgeDisplay').textContent = pct + '%' + (isRealMode ? ' (server)' : '');
             }
 
-            const footer = document.querySelector('.footer');
-            if (footer) {
-                if (isRealMode) {
-                    footer.innerHTML = 'REAL MONEY MODE • Solana USDC • Server-settled on ' + escapeHtml(feedLabel) + ' • Click or Drag to bet';
-                    footer.style.color = '#00ff88';
-                } else {
-                    footer.innerHTML = 'DEMO MODE • $10,000 virtual balance • Click or Drag to bet';
-                    footer.style.color = '#8888aa';
-                }
-            }
-
             // Multipliers come from the server in real mode, from the local sim in demo.
             gridMultipliers = {};
             if (isRealMode && lastServerGrid) applyServerGrid(lastServerGrid);
 
             lockedBoxes = isRealMode ? realLockedBoxes : demoLockedBoxes;
             syncTradingStateToMode();
+            applyBetCap();
             updateBalanceDisplay();
 
             if (isRealMode && !sessionToken) {

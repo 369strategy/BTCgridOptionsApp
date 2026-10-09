@@ -80,7 +80,7 @@ const GAME = {
 
   // Stakes
   MIN_BET: 1,
-  MAX_BET: Number(process.env.MAX_BET || 1000),
+  MAX_BET: Number(process.env.MAX_BET || 100), // real-money stake cap (page reads it from /ws hello)
   MAX_CELLS_PER_REQUEST: 40,
 
   // Bankroll protection. Open bets' worst-case net payout must stay within this
