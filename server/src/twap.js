@@ -1,24 +1,54 @@
 // 5-second TWAP of the Binance trade feed — THE price of the game.
 //
-// The price is CONTINUOUS: at any instant t it is the time-weighted average of
-// the trade price over [t - 5s, t] (the price is held between trades). It
-// moves smoothly, with no steps, so the chart line can draw exactly what is
-// settled. A one-millisecond spike counts for 1/5000 of it.
+// The price is CONTINUOUS: at any instant t it is a weighted time-average of
+// the trade price over [t - 5s, t] (the price is held between trades). The
+// weights taper: a trade fades in over the first TWAP_TAPER_S of its time in
+// the window and fades out over the last TWAP_TAPER_S (raised cosine), with
+// full weight in between. A jump in the price therefore moves the line along
+// a smooth S-curve — no corners — and a momentary spike still counts for
+// almost nothing.
 //
-// It is piecewise linear between "breakpoints" (a trade arriving, or an old
-// trade leaving the 5s window), so evaluating it at every breakpoint and
-// interpolating linearly in between is exact. Those evaluations ('eval') feed
-// settlement: a bet wins if the line enters its cell at any moment.
+// The game line is that average sampled every TWAP_STEP_MS of server time
+// (aligned to multiples of it) and joined by straight lines. Those samples
+// ('eval') feed settlement: a bet wins if the line enters its cell at any
+// moment. The page draws the same samples.
 //
-// Per-second buckets (time-average of each second) are kept as well: the mean
-// of the last 5 equals the continuous TWAP at each whole second, and they are
-// what the odds model starts its simulated paths from.
+// Per-second buckets (time-average of each second) are kept as well; the odds
+// model starts its simulated paths from them and weights them with
+// BUCKET_WEIGHTS (the same taper, integrated over each second).
 const EventEmitter = require('events');
 const config = require('./config');
 const feed = require('./priceFeed');
 
-const { TWAP_WINDOW_S } = config.GAME;
+const { TWAP_WINDOW_S, TWAP_TAPER_S, TWAP_STEP_MS } = config.GAME;
 const WINDOW_MS = TWAP_WINDOW_S * 1000;
+const TAPER_MS = TWAP_TAPER_S * 1000;
+
+/**
+ * Share of the total weight given to ages [0, u] ms (0 = now, WINDOW_MS = the
+ * oldest edge). Integral of the tapered window, normalised to 1 at WINDOW_MS.
+ */
+function weightUpTo(u) {
+  if (u <= 0) return 0;
+  if (u >= WINDOW_MS) return 1;
+  const full = WINDOW_MS - TAPER_MS; // total area of the un-normalised window
+  const g = (x) => x <= TAPER_MS
+    ? x / 2 - (TAPER_MS / (2 * Math.PI)) * Math.sin(Math.PI * x / TAPER_MS)
+    : TAPER_MS / 2 + (x - TAPER_MS);
+  const G = u <= WINDOW_MS - TAPER_MS ? g(u) : full - g(WINDOW_MS - u);
+  return G / full;
+}
+
+// Weight of each completed one-second bucket, newest first (sums to 1).
+const BUCKET_WEIGHTS = [];
+for (let j = 0; j < TWAP_WINDOW_S; j++) BUCKET_WEIGHTS.push(weightUpTo((j + 1) * 1000) - weightUpTo(j * 1000));
+
+/** Weighted TWAP of the last TWAP_WINDOW_S bucket values (array, oldest first). */
+function fromBuckets(vals, end = vals.length) {
+  let s = 0;
+  for (let j = 0; j < TWAP_WINDOW_S; j++) s += BUCKET_WEIGHTS[j] * vals[end - 1 - j];
+  return s;
+}
 const KEEP = 15 * 60; // seconds of buckets / points kept (chart + model)
 const TICK_KEEP_MS = WINDOW_MS + 60 * 1000;
 
@@ -49,8 +79,8 @@ class Twap extends EventEmitter {
     }, 100);
   }
 
-  /** Continuous TWAP at time t (null until we have a trade). */
-  at(t) {
+  /** Tapered TWAP at exactly time t (null until we have a trade). */
+  exact(t) {
     const ticks = this.ticks;
     if (!ticks.length) return null;
     const a = t - WINDOW_MS;
@@ -63,34 +93,41 @@ class Twap extends EventEmitter {
     let p = idx >= 0 ? ticks[idx].p : ticks[0].p;
     let cursor = a, sum = 0;
     for (let i = idx + 1; i < ticks.length && ticks[i].t <= t; i++) {
-      if (ticks[i].t > cursor) { sum += p * (ticks[i].t - cursor); cursor = ticks[i].t; }
+      if (ticks[i].t > cursor) { sum += p * (weightUpTo(t - cursor) - weightUpTo(t - ticks[i].t)); cursor = ticks[i].t; }
       p = ticks[i].p;
     }
-    sum += p * (t - cursor);
-    return sum / WINDOW_MS;
+    sum += p * weightUpTo(t - cursor);
+    return sum;
   }
 
-  /** Emit 'eval' at every breakpoint in (lastEvalT, t], then at t. */
+  /**
+   * The game line at time t: straight line between the samples on the
+   * TWAP_STEP_MS grid either side of t (exactly what settlement uses).
+   */
+  at(t) {
+    const g0 = Math.floor(t / TWAP_STEP_MS) * TWAP_STEP_MS;
+    const v0 = this.exact(g0);
+    if (v0 === null || t === g0) return v0;
+    const v1 = this.exact(g0 + TWAP_STEP_MS);
+    return v0 + (v1 - v0) * (t - g0) / TWAP_STEP_MS;
+  }
+
+  /** Emit 'eval' at every TWAP_STEP_MS grid point in (lastEvalT, t]. */
   evaluateUntil(t) {
     if (!this.ticks.length) return;
-    if (this.lastEvalT === null) this.lastEvalT = t;
-    if (t <= this.lastEvalT) return;
-    const exits = [];
-    for (const k of this.ticks) {
-      const x = k.t + WINDOW_MS;
-      if (x > this.lastEvalT && x < t) exits.push(x);
-    }
-    exits.push(t);
-    for (const x of exits) {
-      const v = this.at(x);
+    const last = Math.floor(t / TWAP_STEP_MS) * TWAP_STEP_MS;
+    if (this.lastEvalT === null) this.lastEvalT = last - TWAP_STEP_MS;
+    for (let x = this.lastEvalT + TWAP_STEP_MS; x <= last; x += TWAP_STEP_MS) {
+      const v = this.exact(x);
       this.current = v;
       this.emit('eval', x, v);
     }
-    this.lastEvalT = t;
+    if (last > this.lastEvalT) this.lastEvalT = last;
   }
 
   onTick(t, p) {
     // The value at t doesn't depend on the trade at t, so evaluate first.
+    // (Grid points are only evaluated once their time has passed.)
     this.evaluateUntil(t);
     if (this.ticks.length && t < this.ticks[this.ticks.length - 1].t) t = this.ticks[this.ticks.length - 1].t;
     this.ticks.push({ t, p });
@@ -127,9 +164,7 @@ class Twap extends EventEmitter {
     this.buckets.push({ t: end, v });
     if (this.buckets.length > KEEP) this.buckets.splice(0, this.buckets.length - KEEP);
     if (this.buckets.length < TWAP_WINDOW_S) return;
-    let s = 0;
-    for (let i = this.buckets.length - TWAP_WINDOW_S; i < this.buckets.length; i++) s += this.buckets[i].v;
-    const avg = s / TWAP_WINDOW_S;
+    const avg = this.exact(end) ?? fromBuckets(this.buckets.map(b => b.v));
     this.value = avg;
     this.points.push({ time: end, price: avg });
     if (this.points.length > KEEP) this.points.splice(0, this.points.length - KEEP);
@@ -155,14 +190,15 @@ class Twap extends EventEmitter {
     if (!older.length) return;
     this.buckets = older.concat(this.buckets).slice(-KEEP);
     this.points = [];
-    let s = 0;
-    for (let i = 0; i < this.buckets.length; i++) {
-      s += this.buckets[i].v;
-      if (i >= TWAP_WINDOW_S) s -= this.buckets[i - TWAP_WINDOW_S].v;
-      if (i >= TWAP_WINDOW_S - 1) this.points.push({ time: this.buckets[i].t, price: s / TWAP_WINDOW_S });
+    const vals = this.buckets.map(b => b.v);
+    for (let i = TWAP_WINDOW_S - 1; i < this.buckets.length; i++) {
+      this.points.push({ time: this.buckets[i].t, price: fromBuckets(vals, i + 1) });
     }
     if (this.points.length) this.value = this.points[this.points.length - 1].price;
   }
 }
 
 module.exports = new Twap();
+module.exports.weightUpTo = weightUpTo;
+module.exports.BUCKET_WEIGHTS = BUCKET_WEIGHTS;
+module.exports.fromBuckets = fromBuckets;

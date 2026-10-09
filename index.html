@@ -1306,12 +1306,34 @@
         let priceHistory = [];          // live Binance trades (faint line + volatility)
 
         // ---------- 5-second TWAP: the game's price ----------
-        // Each second is one bucket: the time-weighted average of the trade price
-        // in that second. The TWAP published at second boundary T is the mean of
-        // the 5 buckets covering [T-5s, T). The server publishes the official
-        // points; this local copy (same algorithm) feeds the demo's odds and is
-        // the price when the server is unreachable.
+        // A weighted time-average of the trade price over the last 5s. The
+        // weights taper (raised cosine) over the first and last TWAP_TAPER_S of
+        // the window, so a price jump moves the line along a smooth S-curve with
+        // no corners. The line is that average sampled every TWAP_STEP_MS of
+        // server time and joined by straight lines — exactly what the server
+        // settles on (server/src/twap.js; keep these in sync with its config).
+        // Per-second buckets (localTwap) feed the demo's odds and are the price
+        // when the server is unreachable.
         const TWAP_WINDOW_S = 5;
+        const TWAP_TAPER_S = 1.5;
+        const TWAP_STEP_MS = 100;
+        // Share of the weight given to ages [0, u] ms (0 = now).
+        function twapWeightUpTo(u) {
+            const Wms = TWAP_WINDOW_S * 1000, Tms = TWAP_TAPER_S * 1000;
+            if (u <= 0) return 0;
+            if (u >= Wms) return 1;
+            const full = Wms - Tms;
+            const g = (x) => x <= Tms ? x / 2 - (Tms / (2 * Math.PI)) * Math.sin(Math.PI * x / Tms) : Tms / 2 + (x - Tms);
+            return (u <= Wms - Tms ? g(u) : full - g(Wms - u)) / full;
+        }
+        // Weight of each completed second, newest first (sums to 1).
+        const TWAP_BUCKET_WEIGHTS = [];
+        for (let j = 0; j < TWAP_WINDOW_S; j++) TWAP_BUCKET_WEIGHTS.push(twapWeightUpTo((j + 1) * 1000) - twapWeightUpTo(j * 1000));
+        function twapFromBuckets(vals, end = vals.length) {
+            let s = 0;
+            for (let j = 0; j < TWAP_WINDOW_S; j++) s += TWAP_BUCKET_WEIGHTS[j] * vals[end - 1 - j];
+            return s;
+        }
         let twapHistory = [];           // [{time, price}] one point per second
         let twapPrice = null;
         let twapFromServer = false;
@@ -1348,9 +1370,7 @@
                 this.buckets.push({ t: end, v });
                 if (this.buckets.length > 900) this.buckets.splice(0, this.buckets.length - 900);
                 if (this.buckets.length < TWAP_WINDOW_S) return;
-                let sum = 0;
-                for (let i = this.buckets.length - TWAP_WINDOW_S; i < this.buckets.length; i++) sum += this.buckets[i].v;
-                const avg = sum / TWAP_WINDOW_S;
+                const avg = twapFromBuckets(this.buckets.map(b => b.v));
                 this.points.push({ time: end, price: avg });
                 if (this.points.length > 900) this.points.splice(0, this.points.length - 900);
                 if (this.onPoint) this.onPoint(end, avg);
@@ -1378,11 +1398,9 @@
                 }
                 this.buckets = older.concat(this.buckets).slice(-900);
                 this.points = [];
-                let sum = 0;
-                for (let i = 0; i < this.buckets.length; i++) {
-                    sum += this.buckets[i].v;
-                    if (i >= TWAP_WINDOW_S) sum -= this.buckets[i - TWAP_WINDOW_S].v;
-                    if (i >= TWAP_WINDOW_S - 1) this.points.push({ time: this.buckets[i].t, price: sum / TWAP_WINDOW_S });
+                const vals = this.buckets.map(b => b.v);
+                for (let i = TWAP_WINDOW_S - 1; i < this.buckets.length; i++) {
+                    this.points.push({ time: this.buckets[i].t, price: twapFromBuckets(vals, i + 1) });
                 }
             },
         };
@@ -2332,7 +2350,7 @@
         // Monte Carlo simulation of the 5s TWAP (demo odds; real-money odds come
         // from the server, which runs the same model). Each path simulates the
         // live price per second, turns it into buckets like localTwap, and rolls
-        // the 60-bucket average forward from the buckets that already happened.
+        // the tapered 5-bucket average forward from the buckets that already happened.
         function runMonteCarloSimulation() {
             if (!price || simulationRunning) return;
             if (isRealMode) return; // real-money odds come from the server
@@ -2377,8 +2395,8 @@
             const startTw = continuousTwap(now) ?? twapNow;
 
             const base = new Float64Array(W);
-            let baseSum = 0;
-            for (let i = 0; i < W; i++) { base[i] = known[known.length - W + i].v; baseSum += base[i]; }
+            for (let i = 0; i < W; i++) base[i] = known[known.length - W + i].v;
+            const wts = TWAP_BUCKET_WEIGHTS;
             const vals = new Float64Array(W + maxSteps);
             const remainMs = Math.max(0, 1000 - part.knownMs);
 
@@ -2387,7 +2405,6 @@
             for (let path = 0; path < NUM_PATHS; path++) {
                 touched.fill(0);
                 vals.set(base);
-                let sum = baseSum;
                 let S = S0;
                 let prevTw = startTw;
                 for (let k = 1; k <= maxSteps; k++) {
@@ -2397,8 +2414,8 @@
                     S *= Math.exp(drift + volPerStep * randomNormal() + jump);
                     const v = k === 1 ? (part.knownSum + ((prev + S) / 2) * remainMs) / 1000 : (prev + S) / 2;
                     vals[W + k - 1] = v;
-                    sum += v - vals[k - 1];
-                    const tw = sum / W;
+                    let tw = 0;
+                    for (let j = 0; j < W; j++) tw += wts[j] * vals[W + k - 1 - j];
                     const col = colAt[k];
                     if (col >= 0) {
                         const a = Math.max(minLevel, Math.floor(Math.min(prevTw, tw) / pricePerCell) * pricePerCell);
@@ -2695,15 +2712,15 @@
                 ctx.stroke();
             }
 
-            // The game price: the continuous 5s TWAP, sampled every 100ms up to
-            // the tip (exactly the line that settles bets).
+            // The game price: the tapered 5s TWAP at every 100ms grid point up to
+            // the tip, joined by straight lines (exactly the line that settles bets).
             const lineEnd = now - TWAP_DISPLAY_LAG_MS;
             const headPrice = continuousTwap(lineEnd) ?? (twapPrice !== null ? twapPrice : price);
             const headY = headPrice ? Math.max(padding.top, Math.min(bottom, priceToY(headPrice))) : centerY;
             const headX = timeToX(lineEnd);
             const linePts = [];
-            for (let t = Math.ceil((timeStart - 1000) / 100) * 100; t < lineEnd; t += 100) {
-                const v = continuousTwap(t);
+            for (let t = Math.ceil((timeStart - 1000) / TWAP_STEP_MS) * TWAP_STEP_MS; t < lineEnd; t += TWAP_STEP_MS) {
+                const v = lineSample(t);
                 if (v !== null) linePts.push([timeToX(t), priceToY(v)]);
             }
             if (headPrice) linePts.push([headX, priceToY(headPrice)]);
@@ -3226,6 +3243,7 @@
         // otherwise (Binance backfill): only adds points older than what we have.
         function seedHistory(points, authoritative) {
             if (!points.length) return;
+            twapSampleCache.clear();
             if (authoritative) {
                 const last = points[points.length - 1].time;
                 priceHistory = points.concat(priceHistory.filter(p => p.time > last));
@@ -3273,10 +3291,9 @@
             if (drop) twapHistory.splice(0, drop);
         }
 
-        // Continuous 5s TWAP at time t from the trade history: time-weighted
-        // average of the price over [t - 5s, t] (price held between trades).
-        // Same definition the server settles on.
-        function continuousTwap(t) {
+        // Tapered 5s TWAP at exactly time t from the trade history (price held
+        // between trades). Same definition the server settles on.
+        function exactTwap(t) {
             const ph = priceHistory;
             if (!ph.length) return null;
             const Wms = TWAP_WINDOW_S * 1000;
@@ -3289,11 +3306,39 @@
             let p = idx >= 0 ? ph[idx].price : ph[0].price;
             let cursor = a, sum = 0;
             for (let i = idx + 1; i < ph.length && ph[i].time <= t; i++) {
-                if (ph[i].time > cursor) { sum += p * (ph[i].time - cursor); cursor = ph[i].time; }
+                if (ph[i].time > cursor) { sum += p * (twapWeightUpTo(t - cursor) - twapWeightUpTo(t - ph[i].time)); cursor = ph[i].time; }
                 p = ph[i].price;
             }
-            sum += p * (t - cursor);
-            return sum / Wms;
+            sum += p * twapWeightUpTo(t - cursor);
+            return sum;
+        }
+
+        // Grid samples more than a second old can't change any more (every trade
+        // before them has arrived), so the chart reuses them instead of
+        // recomputing minutes of line every frame. Cleared when history is replaced.
+        const twapSampleCache = new Map();
+        function lineSample(t) {
+            const hit = twapSampleCache.get(t);
+            if (hit !== undefined) return hit;
+            const v = exactTwap(t);
+            if (v !== null && t < serverNow() - 1000) {
+                twapSampleCache.set(t, v);
+                if (twapSampleCache.size > 12000) {
+                    const cut = serverNow() - 16 * 60 * 1000;
+                    for (const k of twapSampleCache.keys()) if (k < cut) twapSampleCache.delete(k);
+                }
+            }
+            return v;
+        }
+
+        // The game line at time t: straight between the TWAP_STEP_MS samples
+        // either side of t (what the chart draws and what settles).
+        function continuousTwap(t) {
+            const g0 = Math.floor(t / TWAP_STEP_MS) * TWAP_STEP_MS;
+            const v0 = exactTwap(g0);
+            if (v0 === null || t === g0) return v0;
+            const v1 = exactTwap(g0 + TWAP_STEP_MS);
+            return v0 + (v1 - v0) * (t - g0) / TWAP_STEP_MS;
         }
 
         // Every 50ms: move the game price along the continuous TWAP and settle
@@ -3305,7 +3350,16 @@
             const v = continuousTwap(t);
             if (v === null) return;
             twapPrice = v;
-            if (liveTwapPrev && t > liveTwapPrev[0]) checkLockedBoxTouches(liveTwapPrev[0], liveTwapPrev[1], t, v);
+            if (liveTwapPrev && t > liveTwapPrev[0]) {
+                // walk the line's own vertices so no corner is cut
+                let [t0, v0] = liveTwapPrev;
+                for (let g = Math.floor(t0 / TWAP_STEP_MS) * TWAP_STEP_MS + TWAP_STEP_MS; g < t; g += TWAP_STEP_MS) {
+                    const vg = exactTwap(g);
+                    checkLockedBoxTouches(t0, v0, g, vg);
+                    t0 = g; v0 = vg;
+                }
+                checkLockedBoxTouches(t0, v0, t, v);
+            }
             liveTwapPrev = [t, v];
             updatePriceDisplay();
         }

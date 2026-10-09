@@ -1,7 +1,7 @@
 // Server-side odds on the 5-second TWAP. The live-price model is the one the
 // browser used before the merge (EMA volatility with a 1.1x buffer + Merton
 // jump diffusion, 5,000 paths, 1-second steps); each path is then averaged
-// exactly like twap.js. A bet is always priced off a simulation no older than
+// with the same tapered weights as twap.js. A bet is always priced off a simulation no older than
 // QUOTE_MAX_AGE_MS.
 const config = require('./config');
 const feed = require('./priceFeed');
@@ -114,8 +114,8 @@ const cellKey = (cellTs, level) => `${cellTs}_${level}`;
  *
  * Each path simulates the live price second by second (same volatility and
  * jump model as before), turns each second into a bucket the way twap.js does,
- * and rolls the 5-bucket average forward — starting from the buckets that
- * have ALREADY happened, so the known part of the window is priced exactly.
+ * and rolls the tapered 5-bucket average (twap.BUCKET_WEIGHTS) forward —
+ * starting from the buckets that have ALREADY happened.
  *
  * The TWAP is continuous (game.js settles if the line enters a cell at ANY
  * moment), so a cell counts as touched if the path's TWAP crosses its row
@@ -159,14 +159,11 @@ function simulate() {
 
   // Window = last W completed buckets, then the simulated ones.
   const base = new Float64Array(W);
-  let baseSum = 0;
-  for (let i = 0; i < W; i++) {
-    base[i] = known[known.length - W + i].v;
-    baseSum += base[i];
-  }
+  for (let i = 0; i < W; i++) base[i] = known[known.length - W + i].v;
+  const wts = twap.BUCKET_WEIGHTS; // newest first
   const vals = new Float64Array(W + maxSteps);
   const remainMs = Math.max(0, 1000 - part.knownMs);
-  const startTw = twap.at(now) ?? baseSum / W;
+  const startTw = twap.at(now) ?? twap.fromBuckets(base);
 
   const hits = new Uint32Array(HORIZON_CELLS * nLevels);
   const touched = new Uint8Array(HORIZON_CELLS * nLevels);
@@ -174,7 +171,6 @@ function simulate() {
   for (let path = 0; path < NUM_PATHS; path++) {
     touched.fill(0);
     vals.set(base);
-    let sum = baseSum;
     let S = S0;
     let prevTw = startTw;
     for (let k = 1; k <= maxSteps; k++) {
@@ -187,8 +183,8 @@ function simulate() {
         ? (part.knownSum + ((prev + S) / 2) * remainMs) / 1000
         : (prev + S) / 2;
       vals[W + k - 1] = v;
-      sum += v - vals[k - 1];
-      const tw = sum / W;
+      let tw = 0;
+      for (let j = 0; j < W; j++) tw += wts[j] * vals[W + k - 1 - j];
       const col = colAt[k];
       if (col >= 0) {
         // every row the segment prevTw -> tw passes through

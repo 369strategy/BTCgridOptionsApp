@@ -11,6 +11,14 @@ const GAME = {
   // The game's price is the 5-second TWAP of Binance trades (twap.js), so a
   // momentary spike on one trade can't touch a cell. Must match index.html.
   TWAP_WINDOW_S: 5,
+  // The average is TAPERED: trades fade in over the first TWAP_TAPER_S of the
+  // window and fade out over the last TWAP_TAPER_S (raised cosine), full
+  // weight in between. A price jump then moves the line along a smooth S-curve
+  // instead of a straight ramp with sharp corners. Must match index.html.
+  TWAP_TAPER_S: 1.5,
+  // The game line is the TWAP sampled on this grid of server time, joined by
+  // straight lines (sub-pixel on the chart). Settlement uses the same points.
+  TWAP_STEP_MS: 100,
 
   // Bets are only accepted on columns that start at least this far in the future
   // (same rule the UI enforces), and no further out than the simulated horizon.

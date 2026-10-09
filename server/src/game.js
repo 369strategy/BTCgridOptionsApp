@@ -266,9 +266,9 @@ async function settle(snap, outcome, evidence = {}) {
   }
 }
 
-// Settlement runs on the CONTINUOUS 5s TWAP (twap.js). Evaluations arrive at
-// every breakpoint, and the TWAP is linear between them, so each consecutive
-// pair is an exact segment of the line: a bet wins if any part of a segment
+// Settlement runs on the CONTINUOUS 5s TWAP (twap.js). Evaluations arrive on a
+// fixed 100ms grid and the game line is straight between them, so each
+// consecutive pair is an exact segment of the line: a bet wins if any part of a segment
 // inside its column lies in its $10 band — i.e. if the line on screen enters
 // the cell at any moment. Evidence is the exact entry point.
 let prevEval = null; // [t, v]
