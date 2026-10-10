@@ -7,7 +7,9 @@
 // for the server's region/IP, and a mute socket never closes. So: if a stream
 // is silent for FEED_SILENCE_MS after opening, or closes before sending
 // anything (e.g. region-blocked), move to the next one — spot, then Binance's
-// market-data-only spot stream — for the rest of the process lifetime.
+// market-data-only spot stream — for the rest of the process lifetime. A
+// stream that goes silent for FEED_SILENCE_MS AFTER delivering is dropped and
+// reconnected (same stream).
 //
 // On startup the 15-minute history is backfilled from Binance 1-second
 // candles, so the chart and the volatility model don't start empty.
@@ -73,15 +75,28 @@ class PriceFeed extends EventEmitter {
     this.ws = ws;
     let gotData = false;
     let watchdog = null;
+    let stallCheck = null;
 
     ws.on('open', () => {
       console.log(`[feed] connected to ${feed.source} (${feed.url})`);
       this.connected = true;
+      // A stream that has been delivering can also go mute without ever
+      // closing (half-open TCP, an upstream stall). bookTicker sends many
+      // messages a second, so FEED_SILENCE_MS of nothing means the connection
+      // is dead: drop it; 'close' reconnects to the same stream.
+      stallCheck = setInterval(() => {
+        const quiet = Date.now() - this.lastMsgAt;
+        if (!gotData || quiet < config.FEED_SILENCE_MS) return;
+        console.error(`[feed] ${feed.source} stalled (no message for ${(quiet / 1000).toFixed(1)}s) — reconnecting`);
+        clearInterval(stallCheck);
+        try { ws.terminate(); } catch { /* ignore */ }
+      }, 1000);
       watchdog = setTimeout(() => {
         if (gotData || ws !== this.ws) return;
         if (!this.advance(`opened but sent no data in ${config.FEED_SILENCE_MS / 1000}s`)) {
           console.error(`[feed] ${feed.url} silent — reconnecting`);
         }
+        clearInterval(stallCheck);
         ws.removeAllListeners('close');
         try { ws.terminate(); } catch { /* ignore */ }
         setTimeout(() => this.connect(), 1000);
@@ -115,6 +130,7 @@ class PriceFeed extends EventEmitter {
 
     ws.on('close', () => {
       clearTimeout(watchdog);
+      clearInterval(stallCheck);
       this.connected = false;
       if (ws !== this.ws) return;
       if (!gotData) this.advance('closed before sending any data');
