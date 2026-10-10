@@ -225,7 +225,7 @@
     const money = (x) => '$' + Number(x || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const signed = (x) => { const v = Number(x || 0); const c = v > 0.004 ? 'ok' : v < -0.004 ? 'bad' : 'muted'; return `<span class="${c}">${v > 0.004 ? '+' : v < -0.004 ? '−' : ''}${money(Math.abs(v))}</span>`; };
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const short = (w) => w.length > 12 ? w.slice(0, 4) + '…' + w.slice(-4) : w;
+    const short = (w) => w.length > 12 ? w.slice(0, 5) + '…' + w.slice(-5) : w;
     const when = (d) => d ? new Date(d).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
     const clock = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour12: false });
     // Solscan links on the server's network (a devnet test server gets ?cluster=devnet)

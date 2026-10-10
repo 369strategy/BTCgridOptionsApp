@@ -218,6 +218,8 @@ function crowdView(token) {
     'crowd: everyone else sees your bets counted on their cells; your own socket leaves them out');
   ok(!JSON.stringify(anonView.crowd).includes(P) && Array.isArray(anonView.hello.bigWins),
     'crowd carries counts only (no wallets); hello carries the big-win feed');
+  ok(Number.isInteger(hello.trades) && anonView.hello.trades - hello.trades === 3,
+    `platform trade counter counts the 3 accepted bets (${hello.trades} → ${anonView.hello.trades})`);
   const likelyBet = r2.body.accepted.find(b => b.cell === likely.k);
   ok(likelyBet && likelyBet.multiplier <= likely.m + 1e-9, `filled at no more than the multiplier seen (${likely.m}x → ${likelyBet && likelyBet.multiplier}x)`);
   const lowered = r2.body.accepted.find(b => b.cell === later.k);

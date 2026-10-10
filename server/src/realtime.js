@@ -10,6 +10,7 @@
 //   crowd   when open bets change: how many OTHER players have an open bet on
 //           each cell (counts only, never wallets; your own bet isn't counted)
 //   bigWin  a won bet with profit >= $200 or >= +200% (hello carries the recent ones)
+//   trades  real-money bets ever placed on the platform (also in hello)
 //   account / bet   per signed-in wallet (after {type:'auth', token})
 const WebSocket = require('ws');
 const config = require('./config');
@@ -128,6 +129,7 @@ function attach(server) {
       ticks: history,
       twap: twap.points.map(pt => [pt.time, pt.price]),
       bigWins: game.recentBigWins(),
+      trades: game.tradeCount(),
     });
     if (pricing.latest) send(ws, gridMessage(pricing.latest));
     sendCrowd(ws);
@@ -184,6 +186,7 @@ function attach(server) {
   game.events.on('houseEdge', (houseEdge) => broadcast({ type: 'config', houseEdge }));
   game.events.on('crowd', scheduleCrowd);
   game.events.on('bigWin', (win) => broadcast({ type: 'bigWin', win }));
+  game.events.on('trades', (count) => broadcast({ type: 'trades', count }));
   game.events.on('bet', (wallet, bet) => {
     for (const ws of wss.clients) if (ws.wallet === wallet) send(ws, { type: 'bet', bet });
   });

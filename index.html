@@ -455,9 +455,7 @@
         .stat-card { flex: none; }
         .stat-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; white-space: nowrap; }
         .stat-value { font-family: var(--mono); font-size: 13px; color: var(--text); white-space: nowrap; }
-        #volatility, #jumpIntensity { color: var(--text) !important; }
-        .vol-driver { color: var(--text-3); letter-spacing: 0.02em; text-transform: none; }
-        .vol-driver.spike { color: #ffaa00; }
+        #volatility { color: var(--text) !important; }
 
         .topbar-right { display: flex; align-items: center; gap: 14px; flex: none; margin-left: auto; }
         .clock { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
@@ -1158,16 +1156,12 @@
                         <div class="stat-value" id="volume24h">--</div>
                     </div>
                     <div class="stat-card" id="volStat" title="Largest of the 15s / 1m / 2m / 5m volatility estimates (1.1x buffer)">
-                        <div class="stat-label">Volatility <span id="volDriver" class="vol-driver"></span></div>
+                        <div class="stat-label">Volatility</div>
                         <div class="stat-value" id="volatility">--%</div>
                     </div>
-                    <div class="stat-card" id="jumpStat">
-                        <div class="stat-label">Jumps</div>
-                        <div class="stat-value" id="jumpIntensity">--</div>
-                    </div>
-                    <div class="stat-card">
+                    <div class="stat-card" title="Real-money bets placed on paper-tap (all time)">
                         <div class="stat-label">Trades</div>
-                        <div class="stat-value" id="tradeCount">0</div>
+                        <div class="stat-value" id="tradeCount">--</div>
                     </div>
                 </div>
 
@@ -1556,7 +1550,6 @@
                 }
             },
         };
-        let tradeCount = 0;
         let ws = null;
         let gridMultipliers = {};
         let simulationRunning = false;
@@ -2382,7 +2375,6 @@
         const low24hEl = document.getElementById('low24h');
         const volume24hEl = document.getElementById('volume24h');
         const volatilityEl = document.getElementById('volatility');
-        const jumpIntensityEl = document.getElementById('jumpIntensity');
 
         // Utility functions
         const formatPrice = (p) => p ? parseFloat(p).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--,---.--';
@@ -2706,39 +2698,15 @@
             }
             
             volatilityEl.textContent = (estimatedVolatility * 100).toFixed(0) + '%';
-            showVolDriver();
-            
-            // Update jump intensity display
-            const jumpPct = (estimatedJumpParams.jumpProb * 100).toFixed(1);
-            const jumpMag = (estimatedJumpParams.jumpVol * 100).toFixed(2);
-            jumpIntensityEl.textContent = jumpPct + '%';
-            
-            const jumpStat = document.getElementById('jumpStat');
-            if (jumpStat) {
-                jumpStat.title = `Jump Prob: ${jumpPct}%/sec | Magnitude: ±${jumpMag}% | Mean: ${(estimatedJumpParams.jumpMean * 100).toFixed(3)}%`;
-            }
-            
-            // Color based on intensity: green (low) -> yellow -> red (high)
-            if (estimatedJumpParams.jumpProb < 0.005) {
-                jumpIntensityEl.style.color = '#00ff88'; // Low jumps
-            } else if (estimatedJumpParams.jumpProb < 0.015) {
-                jumpIntensityEl.style.color = '#ffaa00'; // Medium jumps
-            } else {
-                jumpIntensityEl.style.color = '#ff4444'; // High jumps
-            }
+            showVolDetails();
         }
 
-        // Which volatility estimator is setting the odds (next to the value),
-        // with every estimate in the tooltip.
-        const VOL_DRIVER_LABELS = { '15s': '15s', '1m': '1m', '2m': '2m', '5m': '5m', floor: 'min', default: '' };
-        function showVolDriver() {
-            const el = document.getElementById('volDriver');
+        // Which volatility estimator is setting the odds, with every estimate,
+        // in the card's tooltip.
+        function showVolDetails() {
             const card = document.getElementById('volStat');
-            if (!el || !card) return;
+            if (!card) return;
             const info = estimatedVolInfo || {};
-            const label = VOL_DRIVER_LABELS[info.driver] ?? (info.driver || '');
-            el.textContent = label ? '· ' + label : '';
-            el.className = 'vol-driver' + (info.driver === '15s' ? ' spike' : '');
             const pct = (v) => v == null ? 'warming up' : (v * 100).toFixed(0) + '%';
             const lines = Object.entries(info.estimates || {}).map(([k, v]) => `${k}: ${pct(v)}`);
             const why = info.driver === 'floor' ? 'every estimate is below the 25% minimum (x1.1)'
@@ -3462,8 +3430,6 @@
             while (drop < priceHistory.length && priceHistory[drop].time < cutoff) drop++;
             if (drop) priceHistory.splice(0, drop);
 
-            tradeCount++;
-            tradeCountEl.textContent = tradeCount.toLocaleString();
             updatePriceDisplay();
 
             // Every trade feeds the local TWAP buckets. Bets settle on TWAP
@@ -3522,6 +3488,12 @@
             if (msg.game.betsPaused) showToast('Real-money betting is paused by the operator', 'warning');
             bigWins = (msg.bigWins || []).slice(0, BIG_WINS_KEEP);
             renderWinFeed();
+            showTradeCount(msg.trades);
+        }
+
+        // Real-money bets placed on the platform, all time (server 'trades').
+        function showTradeCount(n) {
+            if (Number.isFinite(n)) tradeCountEl.textContent = n.toLocaleString('en-US');
         }
 
         // Fill the chart with recent prices so the line never starts at "now".
@@ -3699,6 +3671,7 @@
                     case 'openBets': applyOpenBets(msg.bets); break;
                     case 'bet': applySettledBet(msg.bet); break;
                     case 'crowd': crowdCells = msg.cells || {}; break;
+                    case 'trades': showTradeCount(msg.count); break;
                     case 'bigWin': addBigWin(msg.win); break;
                     case 'auth':
                         if (!msg.ok && sessionToken) {
@@ -4599,7 +4572,7 @@
                 currentProvider = provider;
                 currentAddress = pk.toString();
 
-                const short = currentAddress.slice(0, 4) + '...' + currentAddress.slice(-4);
+                const short = currentAddress.slice(0, 5) + '…' + currentAddress.slice(-5);
                 document.getElementById('walletStatusConnected').style.display = 'flex';
                 document.getElementById('walletStatusDisconnected').style.display = 'none';
                 document.getElementById('connectedWalletAddress').textContent = short;
@@ -4971,7 +4944,7 @@
         })();
 
         const refLink = (token) => SITE_URL + '?ref=' + encodeURIComponent(token);
-        const shortAddr = (w) => (w && w.length > 10 ? w.slice(0, 4) + '…' + w.slice(-4) : (w || ''));
+        const shortAddr = (w) => (w && w.length > 12 ? w.slice(0, 5) + '…' + w.slice(-5) : (w || ''));
         function usd(v, signed) {
             const n = Number(v) || 0;
             const s = '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

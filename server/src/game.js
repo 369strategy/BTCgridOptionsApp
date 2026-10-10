@@ -14,8 +14,11 @@ const referral = require('./referral');
 
 const { GAME } = config;
 // 'bet' (wallet, payload), 'account' (wallet), 'houseEdge' (value),
-// 'crowd' (open bets changed), 'bigWin' (public win)
+// 'crowd' (open bets changed), 'bigWin' (public win), 'trades' (count)
 const events = new EventEmitter();
+
+// Real-money bets ever placed on the platform (the page's "Trades" stat).
+let totalBets = 0;
 
 // In-memory mirror of open bets, so every tick can be checked without a query.
 // id -> { id, wallet, cellTs, level, amount, mult, hi, lo, settling, pending }
@@ -294,8 +297,10 @@ async function placeBets(wallet, requests) {
 
   for (const b of accepted) open.set(b.id, toSnapshot(b));
   if (accepted.length) {
+    totalBets += accepted.length;
     events.emit('account', wallet);
     events.emit('crowd');
+    events.emit('trades', totalBets);
   }
   const repriced = accepted.length ? await lastLook(accepted, received + GAME.BET_HOLD_MS) : [];
   return { accepted: accepted.map(publicBet), rejected, repriced };
@@ -472,6 +477,7 @@ async function start() {
   await loadFlags();
   await loadOpenBets();
   await loadBigWins();
+  totalBets = await Bet.count();
   twap.on('eval', onEval);
   feed.on('source', onSource);
   setInterval(sweep, 250);
@@ -485,5 +491,5 @@ function httpError(status, message) {
 
 module.exports = {
   start, placeBets, account, openBetsFor, publicBet, openExposure, events, flags, setFlag, setHouseEdge, httpError,
-  crowd, recentBigWins,
+  crowd, recentBigWins, tradeCount: () => totalBets,
 };
