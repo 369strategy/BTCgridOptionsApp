@@ -518,8 +518,6 @@
         .legend-swatch.win { width: 9px; height: 9px; border: 1px solid var(--green); background: var(--green-bg); }
         .legend-swatch.loss { width: 9px; height: 9px; border: 1px solid var(--red); background: var(--red-bg); }
         .legend-person { color: #d4d4d8; }
-        .bot-icon { display: inline-block; flex: none; color: #d4d4d8; vertical-align: -1px; }
-        .lb-bot { margin-left: 6px; }
         .mult-scale { gap: 3px; }
 
         /* Big-win feed: bottom-left of the chart, over the past (not bettable) side */
@@ -1202,7 +1200,6 @@
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
                         <div class="legend-item"><span class="legend-swatch loss"></span>Loss</div>
                         <div class="legend-item"><svg class="legend-person" width="9" height="10" viewBox="0 0 10 11" aria-hidden="true"><circle cx="5" cy="2.9" r="2.3" fill="currentColor"/><path d="M1 11a4 4 0 0 1 8 0z" fill="currentColor"/></svg>Other players</div>
-                        <div class="legend-item"><svg class="bot-icon" width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6 0.3a1 1 0 1 1 0 2a1 1 0 1 1 0-2z M5.45 2.3h1.1v1.1h-1.1z M3.5 3.4h5a2 2 0 0 1 2 2v3.6a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2z M4.4 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M7.6 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M4.6 8.6h2.8v0.7h-2.8z"/></svg>Bots</div>
                         <div class="legend-item mult-scale" title="Multiplier colours: &lt;2x, 2–5x, 5–10x, 10–25x, 25–50x, 50–100x, 100x">
                             <span>1x</span>
                             <i style="background: rgb(98, 188, 146)"></i><i style="background: rgb(150, 190, 116)"></i><i style="background: rgb(198, 190, 106)"></i><i style="background: rgb(204, 162, 92)"></i><i style="background: rgb(200, 124, 98)"></i><i style="background: rgb(194, 102, 112)"></i><i style="background: rgb(186, 92, 132)"></i>
@@ -1244,7 +1241,7 @@
                         <tbody id="lbBody"><tr><td colspan="7" class="lb-empty">Loading…</td></tr></tbody>
                     </table>
                 </div>
-                <div class="lb-foot" id="lbFoot">Settled bets only. <svg class="bot-icon" width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6 0.3a1 1 0 1 1 0 2a1 1 0 1 1 0-2z M5.45 2.3h1.1v1.1h-1.1z M3.5 3.4h5a2 2 0 0 1 2 2v3.6a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2z M4.4 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M7.6 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M4.6 8.6h2.8v0.7h-2.8z"/></svg> = bot. Updates every 30 seconds.</div>
+                <div class="lb-foot" id="lbFoot">Settled bets only. Updates every 30 seconds.</div>
             </div>
         </div>
     </div>
@@ -1442,7 +1439,7 @@
         // ================================================
         // Same origin when served by the Railway app; GitHub Pages calls it cross-origin.
         const RAILWAY_URL = 'https://btc-grid-production.up.railway.app';
-        const API_BASE = location.hostname.endsWith('github.io') ? RAILWAY_URL : '';
+        const API_BASE = /(^|.)(railway.app|paper-tap.xyz)$/.test(location.hostname) ? '' : RAILWAY_URL;
         // Columns, bet cutoffs and settlement run on the SERVER clock, so every
         // timestamp on this page uses serverNow() (offset synced in syncClock).
         let serverOffset = 0;
@@ -3199,7 +3196,7 @@
             // icon, top-right corner) and bots (bot icon, top-left corner). The
             // server leaves out your own bet.
             const badgeSize = Math.max(7.5, fs - 2);
-            for (const [counts, bot] of [[crowdCells, false], [crowdBots, true]]) {
+            for (const [counts, bot] of [[Object.entries(crowdBots).reduce((m, [k, v]) => (m[k] = (m[k] || 0) + v, m), { ...crowdCells }), false]]) {
                 for (const key in counts) {
                     const n = counts[key];
                     const sep = key.indexOf('_');
@@ -5015,8 +5012,8 @@
                 row.className = 'win-feed-item' + (w.id === freshId ? ' fresh' : '');
                 row.style.setProperty('--tone', `rgb(${r}, ${g}, ${b})`);
                 row.style.opacity = WIN_FEED_FADE[shown.length - 1 - i];
-                row.title = `${who}${w.bot ? ' (bot)' : ''} won ${usd(w.payout)} on a ${usd(w.amount)} bet at ${formatMultiplier(w.mult)}`;
-                if (w.bot) row.insertAdjacentHTML('beforeend', botIconSvg(10));
+                row.title = `${who} won ${usd(w.payout)} on a ${usd(w.amount)} bet at ${formatMultiplier(w.mult)}`;
+                
                 for (const [cls, text] of [['who', who], ['amt', usd(w.profit, true)], ['mult', formatMultiplier(w.mult)], ['age', winAge(w.at)]]) {
                     const span = document.createElement('span');
                     span.className = cls;
@@ -5068,7 +5065,7 @@
                         : '—';
                     return `<tr class="${me ? 'me' : ''}">
                         <td><span class="lb-rank ${i < 3 ? 'r' + (i + 1) : ''}">${i + 1}</span></td>
-                        <td title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}${row.bot ? `<span class="lb-bot">${botIconSvg(11)}</span>` : ''}${me ? '<span class="lb-you">YOU</span>' : ''}</td>
+                        <td title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}${me ? '<span class="lb-you">YOU</span>' : ''}</td>
                         <td class="${toneClass(row.pnl)}">${usd(row.pnl, true)}</td>
                         <td>${usd(row.volume)}</td>
                         <td class="lb-hide-sm">${row.bets}</td>
