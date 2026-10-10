@@ -127,6 +127,21 @@ const MONEY = {
   MIN_HOT_SOL: 0.003,
 };
 
+// Simulated traders (sim.js) for TEST servers: SIM_TRADERS=1 on a non-mainnet
+// cluster. Refused on mainnet, where every player shown must be real.
+const SIM = {
+  ENABLED: process.env.SIM_TRADERS === '1',
+  SEED: process.env.SIM_SEED || 'paper-tap-sim',   // trader wallets derive from it
+  START_PNL: [255, 127, 18, -11, -39],             // the first five traders' track record ($)
+  BETS_PER_MIN: Number(process.env.SIM_BETS_PER_MIN || 5), // all traders together, at random times
+  MIN_STAKE: 1,
+  MAX_STAKE: 11,
+  NEW_TRADER_MS: Number(process.env.SIM_NEW_TRADER_MS || 5 * 60 * 1000),
+  BANKROLL: 300,          // each trader's balance, topped up again when it runs low
+  HOUSE_FLOOR: 5000,      // the test house is refilled below this...
+  HOUSE_TOP_UP: 20000,    // ...by this much
+};
+
 const USDC_MINTS = {
   mainnet: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   devnet: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
@@ -149,6 +164,7 @@ function list(v) {
 module.exports = {
   GAME,
   MONEY,
+  SIM,
   CLUSTER,
   USDC_MINT: USDC_MINTS[CLUSTER],
   USDC_DECIMALS: 6,

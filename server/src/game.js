@@ -127,6 +127,13 @@ async function loadBigWins() {
   bigWins.splice(0, bigWins.length, ...rows.map(publicWin));
 }
 
+/** Re-read the trade count and big wins after bets were written directly (sim.js history). */
+async function reloadStats() {
+  await loadBigWins();
+  totalBets = await Bet.count();
+  events.emit('trades', totalBets);
+}
+
 /** Big wins of the past day, newest first. */
 function recentBigWins() {
   const since = Date.now() - 24 * 60 * 60 * 1000;
@@ -491,5 +498,5 @@ function httpError(status, message) {
 
 module.exports = {
   start, placeBets, account, openBetsFor, publicBet, openExposure, events, flags, setFlag, setHouseEdge, httpError,
-  crowd, recentBigWins, tradeCount: () => totalBets,
+  crowd, recentBigWins, tradeCount: () => totalBets, reloadStats,
 };

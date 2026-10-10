@@ -10,6 +10,7 @@ const game = require('./game');
 const deposits = require('./deposits');
 const realtime = require('./realtime');
 const routes = require('./routes');
+const sim = require('./sim');
 
 const ROOT = path.join(__dirname, '..', '..'); // repo root: index.html, assets/
 
@@ -19,6 +20,7 @@ async function main() {
   twap.start();
   feed.start();
   deposits.start();
+  sim.start().catch(err => console.error(`[sim] ${err.message}`)); // test servers only (SIM_TRADERS=1, never mainnet)
 
   const app = express();
   app.set('trust proxy', config.TRUST_PROXY);

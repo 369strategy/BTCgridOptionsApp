@@ -19,6 +19,19 @@ if (config.DB_DIALECT === 'postgres') {
     storage: process.env.SQLITE_PATH || path.join(__dirname, '..', 'dev.sqlite'),
     logging: false,
   });
+  // SQLite (local runs only) has one writer at a time and sequelize opens a
+  // connection per transaction, so two bets settling at the same moment fail
+  // with SQLITE_BUSY and can stall. Transactions take turns instead; a
+  // savepoint (an outer transaction passed in) runs inside its caller's turn.
+  const run = sequelize.transaction.bind(sequelize);
+  let tail = Promise.resolve();
+  sequelize.transaction = (options, callback) => {
+    if (typeof options === 'function') { callback = options; options = {}; }
+    if (!callback || (options && options.transaction)) return run(options, callback);
+    const turn = tail.then(() => run(options, callback));
+    tail = turn.catch(() => {});
+    return turn;
+  };
 }
 
 const MONEY = DataTypes.DECIMAL(20, 6);
