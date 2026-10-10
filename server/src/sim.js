@@ -1,21 +1,22 @@
-// Simulated traders for TEST servers (local / devnet), to see the platform with
-// players on it. They bet through the real engine (game.placeBets), so odds,
-// settlement, P&L, the leaderboard, crowd counts and the big-win feed treat
-// them exactly like players. Never runs on mainnet: a real-money server must
-// only ever show real players.
+// Bot traders (SIM_TRADERS=1). They bet through the real game engine, so odds,
+// settlement, P&L, the leaderboard, cell counts and the big-win feed all treat
+// their bets like any other — but they play with PRETEND money in their own
+// ledger accounts (bots.js: sim_player / sim_escrow / sim_house, funded from
+// sim_external), never USDC, and every screen shows them with a bot icon.
+// Their wallets are random public keys; no private key is kept, so nobody can
+// sign in as one.
 //
-//   SIM_TRADERS=1 on a non-mainnet cluster (server/scripts/sim-local.js does this)
 //   - the first five start with a track record of SIM.START_PNL
 //   - together they place ~SIM.BETS_PER_MIN bets a minute, $1–$11, at random times
-//   - one more trader joins every SIM.NEW_TRADER_MS
-const crypto = require('crypto');
+//   - one more bot joins every SIM.NEW_TRADER_MS
 const { Keypair } = require('@solana/web3.js');
 const config = require('./config');
-const { sequelize, Bet, Setting } = require('./db');
+const { sequelize, Bet } = require('./db');
 const ledger = require('./ledger');
 const feed = require('./priceFeed');
 const pricing = require('./pricing');
 const game = require('./game');
+const bots = require('./bots');
 
 const { GAME, SIM } = config;
 const round2 = (x) => Math.round(x * 100) / 100;
@@ -23,26 +24,19 @@ const floor2 = (x) => Math.floor(x * 100 + 1e-9) / 100;
 const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-const traders = [];
-
-// Trader i's wallet, derived from SIM.SEED: the same traders come back after a restart.
-function traderWallet(i) {
-  const seed = crypto.createHash('sha256').update(`${SIM.SEED}:${i}`).digest();
-  return Keypair.fromSeed(seed).publicKey.toBase58();
-}
-
+// Pretend money in: sim_external -> a bot's balance or the bots' house.
 async function credit(account, wallet, amount, ref) {
   await sequelize.transaction(async (t) => {
     await ledger.postEntries([
-      { account: 'external', amount: -amount },
+      { account: 'sim_external', amount: -amount },
       { account, walletAddress: wallet, amount },
-    ], 'sim_credit', ref, 'simulated trader', t);
+    ], 'sim_credit', ref, 'bot (pretend money)', t);
   });
 }
 
 async function ensureHouse() {
-  if ((await ledger.balance('house')) < SIM.HOUSE_FLOOR) {
-    await credit('house', null, SIM.HOUSE_TOP_UP, `house-${Date.now()}`);
+  if ((await ledger.balance('sim_house')) < SIM.HOUSE_FLOOR) {
+    await credit('sim_house', null, SIM.HOUSE_TOP_UP, `house-${Date.now()}`);
   }
 }
 
@@ -80,7 +74,7 @@ function historyPlan(target) {
 }
 
 // Write the track record as settled bets over the last few hours, with the
-// same ledger legs settlement posts (stake out, payout in).
+// same (pretend-money) ledger legs settlement posts.
 async function writeHistory(wallet, target) {
   const plan = historyPlan(target);
   const now = Date.now();
@@ -100,26 +94,25 @@ async function writeHistory(wallet, target) {
       }, { transaction: t });
       const net = round2(payout - amount);
       await ledger.postEntries([
-        { account: 'player', walletAddress: wallet, amount: net },
-        { account: 'house', amount: -net },
+        { account: 'sim_player', walletAddress: wallet, amount: net },
+        { account: 'sim_house', amount: -net },
       ], won ? 'bet_won' : 'bet_lost', bet.id, null, t);
     }
   });
 }
 
 async function addTrader(startPnl) {
-  const i = traders.length;
-  const wallet = traderWallet(i);
-  await credit('player', wallet, SIM.BANKROLL, `bankroll-${wallet}`);
+  const wallet = Keypair.generate().publicKey.toBase58(); // the secret key is dropped
+  await bots.add(wallet);
+  await credit('sim_player', wallet, SIM.BANKROLL, `bankroll-${wallet}`);
   if (startPnl !== undefined) await writeHistory(wallet, startPnl);
-  traders.push(wallet);
-  await Setting.upsert({ key: 'simTraders', value: String(traders.length) });
   return wallet;
 }
 
-// One bet by a random trader on a random open cell (likelier cells more often).
+// One bet by a random bot on a random open cell (likelier cells more often).
 async function betOnce() {
   const sim = pricing.latest;
+  const traders = bots.list();
   if (!traders.length || !sim || !feed.isLive() || game.flags.betsPaused) return;
   const now = Date.now();
   const cells = Object.entries(sim.quotes)
@@ -131,7 +124,7 @@ async function betOnce() {
   const [cell, quote] = pick;
   const wallet = traders[randInt(0, traders.length - 1)];
   const amount = randInt(SIM.MIN_STAKE, SIM.MAX_STAKE);
-  if ((await ledger.balance('player', wallet)) < amount + 15) await credit('player', wallet, SIM.BANKROLL, `topup-${wallet}-${now}`);
+  if ((await ledger.balance('sim_player', wallet)) < amount + 15) await credit('sim_player', wallet, SIM.BANKROLL, `topup-${wallet}-${now}`);
   await ensureHouse();
   await game.placeBets(wallet, [{ cell, amount, seenMult: quote.mult }]);
 }
@@ -143,25 +136,17 @@ function scheduleBet() {
 
 async function start() {
   if (!SIM.ENABLED) return;
-  if (config.CLUSTER === 'mainnet') {
-    console.error('[sim] SIM_TRADERS ignored: this is a mainnet (real-money) server — only real players are shown here');
-    return;
-  }
   while (!feed.price) await sleep(1000);
-  const row = await Setting.findByPk('simTraders');
-  const count = row ? Number(row.value) : 0;
-  if (count === 0) {
-    await ensureHouse();
+  await ensureHouse();
+  if (bots.count() === 0) {
     for (const pnl of SIM.START_PNL) await addTrader(pnl);
     await game.reloadStats();
-  } else {
-    for (let i = 0; i < count; i++) traders.push(traderWallet(i));
   }
-  console.log(`[sim] ${traders.length} simulated traders, ~${SIM.BETS_PER_MIN} bets/min, +1 trader every ${SIM.NEW_TRADER_MS / 60000} min`);
+  console.log(`[sim] ${bots.count()} bots, ~${SIM.BETS_PER_MIN} bets/min, +1 every ${SIM.NEW_TRADER_MS / 60000} min (pretend money)`);
   scheduleBet();
   setInterval(() => {
-    addTrader().then(w => console.log(`[sim] trader ${traders.length} joined (${w})`))
-      .catch(err => console.warn(`[sim] adding a trader failed: ${err.message}`));
+    addTrader().then(w => console.log(`[sim] bot ${bots.count()} joined (${w})`))
+      .catch(err => console.warn(`[sim] adding a bot failed: ${err.message}`));
   }, SIM.NEW_TRADER_MS);
 }
 

@@ -179,6 +179,12 @@ const Setting = sequelize.define('Setting', {
   value: { type: DataTypes.STRING, allowNull: false },
 }, { tableName: 'settings', timestamps: false });
 
+// Bot traders (sim.js). Public key only — no private key is ever kept, so no
+// one can sign in as a bot. Their money lives in the sim_* ledger accounts.
+const SimTrader = sequelize.define('SimTrader', {
+  wallet: { type: DataTypes.STRING, primaryKey: true },
+}, { tableName: 'sim_traders' });
+
 async function init() {
   await sequelize.authenticate();
   await sequelize.sync();
@@ -188,5 +194,5 @@ async function init() {
 module.exports = {
   sequelize, init,
   LedgerEntry, VaultLock, ProcessedTx, PendingDeposit, Deposit, Withdrawal, Bet, Setting, Player, UsedSignature, HeldDeposit,
-  Referral, AffiliateCommission,
+  Referral, AffiliateCommission, SimTrader,
 };

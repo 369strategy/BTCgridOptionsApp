@@ -346,18 +346,18 @@
         const t = r.totals;
         $('playerCount').textContent = t.players;
         $('playerTotals').innerHTML = [
-            ['Players', t.players],
+            ['Players', t.players + (t.bots ? ` (+${t.bots} bots)` : '')],
             ['Bets', t.bets.toLocaleString('en-US')],
             ['Staked (settled)', money(t.staked)],
             ['Paid out', money(t.paid)],
-            ['House P&L on bets', signed(t.housePnl)],
+            ['House P&L on bets (real money)', signed(t.housePnl)],
             ['Players deposited', money(t.deposited)],
             ['Players withdrew', money(t.withdrawn)],
         ].map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
         const sel = $('tradeWallet').value.trim();
         $('players').innerHTML = r.players.map(p => `
             <tr class="player${p.wallet === sel ? ' selected' : ''}" data-wallet="${esc(p.wallet)}" onclick="showPlayer(this.dataset.wallet)" title="${esc(p.wallet)}">
-                <td class="wallet">${esc(short(p.wallet))}${p.isAdmin ? '<span class="tag">admin</span>' : ''}
+                <td class="wallet">${esc(short(p.wallet))}${p.isAdmin ? '<span class="tag">admin</span>' : ''}${p.bot ? '<span class="tag">bot</span>' : ''}
                     <a href="${scan('account', p.wallet)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open on Solscan">↗</a></td>
                 <td class="num">${p.logins}</td>
                 <td>${when(p.lastSeenAt)}</td>
@@ -420,7 +420,7 @@
             return `<tr>
                 <td class="num muted">${b.id}</td>
                 <td>${when(b.createdAt)}</td>
-                <td class="wallet"><a href="#" data-wallet="${esc(b.wallet)}" onclick="showPlayer(this.dataset.wallet); return false" title="${esc(b.wallet)}">${esc(short(b.wallet))}</a></td>
+                <td class="wallet"><a href="#" data-wallet="${esc(b.wallet)}" onclick="showPlayer(this.dataset.wallet); return false" title="${esc(b.wallet)}">${esc(short(b.wallet))}</a>${b.bot ? '<span class="tag">bot</span>' : ''}</td>
                 <td>${clock(b.cellTs)}–${clock(b.cellTs + 10000)}</td>
                 <td class="num">${money(b.priceLevel).slice(0, -3)}–${money(b.priceLevel + 10).slice(0, -3)}</td>
                 <td class="num">${money(b.amount)}</td>

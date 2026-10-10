@@ -5,6 +5,7 @@
 //   best    the biggest single win (payout − stake) and its multiplier
 const { Op } = require('sequelize');
 const { sequelize, Bet } = require('./db');
+const bots = require('./bots');
 
 const DAY = 24 * 60 * 60 * 1000;
 const PERIODS = { '24h': DAY, '7d': 7 * DAY, '30d': 30 * DAY, all: null };
@@ -42,6 +43,7 @@ async function allRows(period) {
     const bets = Number(r.bets), wins = Number(r.wins);
     return {
       wallet: r.wallet,
+      bot: bots.isBot(r.wallet),
       pnl: round2(Number(r.paid || 0) - Number(r.volume || 0)),
       volume: round2(r.volume),
       bets, wins,

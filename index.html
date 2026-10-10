@@ -518,6 +518,8 @@
         .legend-swatch.win { width: 9px; height: 9px; border: 1px solid var(--green); background: var(--green-bg); }
         .legend-swatch.loss { width: 9px; height: 9px; border: 1px solid var(--red); background: var(--red-bg); }
         .legend-person { color: #d4d4d8; }
+        .bot-icon { display: inline-block; flex: none; color: #d4d4d8; vertical-align: -1px; }
+        .lb-bot { margin-left: 6px; }
         .mult-scale { gap: 3px; }
 
         /* Big-win feed: bottom-left of the chart, over the past (not bettable) side */
@@ -1200,6 +1202,7 @@
                         <div class="legend-item"><span class="legend-swatch win"></span>Win</div>
                         <div class="legend-item"><span class="legend-swatch loss"></span>Loss</div>
                         <div class="legend-item"><svg class="legend-person" width="9" height="10" viewBox="0 0 10 11" aria-hidden="true"><circle cx="5" cy="2.9" r="2.3" fill="currentColor"/><path d="M1 11a4 4 0 0 1 8 0z" fill="currentColor"/></svg>Other players</div>
+                        <div class="legend-item"><svg class="bot-icon" width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6 0.3a1 1 0 1 1 0 2a1 1 0 1 1 0-2z M5.45 2.3h1.1v1.1h-1.1z M3.5 3.4h5a2 2 0 0 1 2 2v3.6a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2z M4.4 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M7.6 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M4.6 8.6h2.8v0.7h-2.8z"/></svg>Bots</div>
                         <div class="legend-item mult-scale" title="Multiplier colours: &lt;2x, 2–5x, 5–10x, 10–25x, 25–50x, 50–100x, 100x">
                             <span>1x</span>
                             <i style="background: rgb(98, 188, 146)"></i><i style="background: rgb(150, 190, 116)"></i><i style="background: rgb(198, 190, 106)"></i><i style="background: rgb(204, 162, 92)"></i><i style="background: rgb(200, 124, 98)"></i><i style="background: rgb(194, 102, 112)"></i><i style="background: rgb(186, 92, 132)"></i>
@@ -1241,7 +1244,7 @@
                         <tbody id="lbBody"><tr><td colspan="7" class="lb-empty">Loading…</td></tr></tbody>
                     </table>
                 </div>
-                <div class="lb-foot" id="lbFoot">Real-money bets only, once settled. Updates every 30 seconds.</div>
+                <div class="lb-foot" id="lbFoot">Settled bets only. <svg class="bot-icon" width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M6 0.3a1 1 0 1 1 0 2a1 1 0 1 1 0-2z M5.45 2.3h1.1v1.1h-1.1z M3.5 3.4h5a2 2 0 0 1 2 2v3.6a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2z M4.4 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M7.6 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M4.6 8.6h2.8v0.7h-2.8z"/></svg> = bot. Updates every 30 seconds.</div>
             </div>
         </div>
     </div>
@@ -1613,8 +1616,10 @@
         let lockedBoxes = {};
 
         // Other players (server 'crowd'): "cellTs_level" -> how many others have
-        // an open real-money bet there. Big wins (server 'bigWin'), newest first.
+        // an open real-money bet there; crowdBots the same for bots. Big wins
+        // (server 'bigWin'), newest first.
         let crowdCells = {};
+        let crowdBots = {};
         let bigWins = [];
 
         // Auto-bet state
@@ -3190,21 +3195,24 @@
                 }
             }
 
-            // Other players: person icon + how many others have an open bet on
-            // the cell, in its top-right corner (the server leaves out your own).
+            // How many others have an open bet on the cell: players (person
+            // icon, top-right corner) and bots (bot icon, top-left corner). The
+            // server leaves out your own bet.
             const badgeSize = Math.max(7.5, fs - 2);
-            for (const key in crowdCells) {
-                const n = crowdCells[key];
-                const sep = key.indexOf('_');
-                const cellTs = Number(key.slice(0, sep));
-                const level = Number(key.slice(sep + 1));
-                if (!(n > 0) || cellTs + msPerCell <= now) continue;
-                const bx0 = Math.max(timeToX(cellTs), padding.left);
-                const bx1 = Math.min(timeToX(cellTs + msPerCell), right);
-                const by0 = Math.max(priceToY(level + pricePerCell), padding.top);
-                const by1 = Math.min(priceToY(level), bottom);
-                if (bx1 - bx0 < 30 || by1 - by0 < 18) continue;
-                drawCrowdBadge(bx1 - 6, by0 + 5, n, badgeSize);
+            for (const [counts, bot] of [[crowdCells, false], [crowdBots, true]]) {
+                for (const key in counts) {
+                    const n = counts[key];
+                    const sep = key.indexOf('_');
+                    const cellTs = Number(key.slice(0, sep));
+                    const level = Number(key.slice(sep + 1));
+                    if (!(n > 0) || cellTs + msPerCell <= now) continue;
+                    const bx0 = Math.max(timeToX(cellTs), padding.left);
+                    const bx1 = Math.min(timeToX(cellTs + msPerCell), right);
+                    const by0 = Math.max(priceToY(level + pricePerCell), padding.top);
+                    const by1 = Math.min(priceToY(level), bottom);
+                    if (bx1 - bx0 < 30 || by1 - by0 < 18) continue;
+                    drawCrowdBadge(bot ? bx0 + 6 : bx1 - 6, by0 + 5, n, badgeSize, bot);
+                }
             }
 
             // Big-win feed: drop the wallet column when the past area is narrow
@@ -3257,17 +3265,37 @@
             ctx.textBaseline = 'alphabetic';
         }
 
-        // "[person] n", right-aligned at xRight, top at yTop, `size` px tall.
-        function drawCrowdBadge(xRight, yTop, n, size) {
+        // "[icon] n", `size` px tall with its top at yTop: players (person icon)
+        // right-aligned at x, bots (bot icon) left-aligned at x.
+        function drawCrowdBadge(x, yTop, n, size, bot) {
             const label = n > 99 ? '99+' : String(n);
             const cy = yTop + size / 2;
+            const iconW = size * 0.78;
             ctx.font = `600 ${size}px ${CHART_MONO}`;
-            ctx.textAlign = 'right';
+            ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = 'rgba(212, 212, 216, 0.82)';
-            ctx.fillText(label, xRight, cy + 0.5);
-            drawPersonIcon(xRight - ctx.measureText(label).width - 1.5 - size * 0.36, cy, size);
+            const left = bot ? x : x - ctx.measureText(label).width - 1.5 - iconW;
+            if (bot) drawBotIcon(left + iconW / 2, cy, size);
+            else drawPersonIcon(left + iconW / 2, cy, size);
+            ctx.fillText(label, left + iconW + 1.5, cy + 0.5);
             ctx.textAlign = 'center';
+        }
+
+        // Bot head (antenna, eyes, mouth) on a 12x12 grid; the same shape is
+        // used in the page (botIconSvg) and on the chart (drawBotIcon).
+        const BOT_ICON_D = 'M6 0.3a1 1 0 1 1 0 2a1 1 0 1 1 0-2z M5.45 2.3h1.1v1.1h-1.1z M3.5 3.4h5a2 2 0 0 1 2 2v3.6a2 2 0 0 1-2 2h-5a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2z M4.4 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M7.6 5.55a1.05 1.05 0 1 0 0 2.1a1.05 1.05 0 1 0 0-2.1z M4.6 8.6h2.8v0.7h-2.8z';
+        const BOT_PATH = new Path2D(BOT_ICON_D);
+        const botIconSvg = (px) => `<svg class="bot-icon" width="${px}" height="${px}" viewBox="0 0 12 12" role="img" aria-label="Bot"><title>Bot</title><path fill="currentColor" fill-rule="evenodd" d="${BOT_ICON_D}"/></svg>`;
+
+        // The bot head, about s px tall, centred on (x, y), in the current fill.
+        function drawBotIcon(x, y, s) {
+            const k = s / 11.6;
+            ctx.save();
+            ctx.translate(x - 6 * k, y - 5.65 * k);
+            ctx.scale(k, k);
+            ctx.fill(BOT_PATH, 'evenodd');
+            ctx.restore();
         }
 
         // Head and shoulders, about s px tall, centred on (x, y), in the current fill.
@@ -3670,7 +3698,7 @@
                     case 'account': applyAccount(msg.account); break;
                     case 'openBets': applyOpenBets(msg.bets); break;
                     case 'bet': applySettledBet(msg.bet); break;
-                    case 'crowd': crowdCells = msg.cells || {}; break;
+                    case 'crowd': crowdCells = msg.cells || {}; crowdBots = msg.bots || {}; break;
                     case 'trades': showTradeCount(msg.count); break;
                     case 'bigWin': addBigWin(msg.win); break;
                     case 'auth':
@@ -3687,6 +3715,7 @@
                 if (sock !== serverWs) return;
                 serverFeedUp = false;
                 crowdCells = {};
+                crowdBots = {};
                 // Once the direct demo feed is running, keep its status label.
                 if (!directMode) {
                     setFeedStatus(false, 'Reconnecting...');
@@ -4986,7 +5015,8 @@
                 row.className = 'win-feed-item' + (w.id === freshId ? ' fresh' : '');
                 row.style.setProperty('--tone', `rgb(${r}, ${g}, ${b})`);
                 row.style.opacity = WIN_FEED_FADE[shown.length - 1 - i];
-                row.title = `${who} won ${usd(w.payout)} on a ${usd(w.amount)} bet at ${formatMultiplier(w.mult)}`;
+                row.title = `${who}${w.bot ? ' (bot)' : ''} won ${usd(w.payout)} on a ${usd(w.amount)} bet at ${formatMultiplier(w.mult)}`;
+                if (w.bot) row.insertAdjacentHTML('beforeend', botIconSvg(10));
                 for (const [cls, text] of [['who', who], ['amt', usd(w.profit, true)], ['mult', formatMultiplier(w.mult)], ['age', winAge(w.at)]]) {
                     const span = document.createElement('span');
                     span.className = cls;
@@ -5038,7 +5068,7 @@
                         : '—';
                     return `<tr class="${me ? 'me' : ''}">
                         <td><span class="lb-rank ${i < 3 ? 'r' + (i + 1) : ''}">${i + 1}</span></td>
-                        <td title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}${me ? '<span class="lb-you">YOU</span>' : ''}</td>
+                        <td title="${escapeHtml(row.wallet)}">${escapeHtml(shortAddr(row.wallet))}${row.bot ? `<span class="lb-bot">${botIconSvg(11)}</span>` : ''}${me ? '<span class="lb-you">YOU</span>' : ''}</td>
                         <td class="${toneClass(row.pnl)}">${usd(row.pnl, true)}</td>
                         <td>${usd(row.volume)}</td>
                         <td class="lb-hide-sm">${row.bets}</td>

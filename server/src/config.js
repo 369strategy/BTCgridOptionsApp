@@ -127,18 +127,17 @@ const MONEY = {
   MIN_HOT_SOL: 0.003,
 };
 
-// Simulated traders (sim.js) for TEST servers: SIM_TRADERS=1 on a non-mainnet
-// cluster. Refused on mainnet, where every player shown must be real.
+// Bot traders (sim.js), on with SIM_TRADERS=1. They play with pretend money in
+// their own ledger accounts (never USDC) and are shown with a bot icon.
 const SIM = {
   ENABLED: process.env.SIM_TRADERS === '1',
-  SEED: process.env.SIM_SEED || 'paper-tap-sim',   // trader wallets derive from it
-  START_PNL: [255, 127, 18, -11, -39],             // the first five traders' track record ($)
+  START_PNL: [255, 127, 18, -11, -39],             // the first five bots' track record ($)
   BETS_PER_MIN: Number(process.env.SIM_BETS_PER_MIN || 5), // all traders together, at random times
   MIN_STAKE: 1,
   MAX_STAKE: 11,
   NEW_TRADER_MS: Number(process.env.SIM_NEW_TRADER_MS || 5 * 60 * 1000),
-  BANKROLL: 300,          // each trader's balance, topped up again when it runs low
-  HOUSE_FLOOR: 5000,      // the test house is refilled below this...
+  BANKROLL: 300,          // each bot's pretend balance, topped up again when it runs low
+  HOUSE_FLOOR: 5000,      // the bots' pretend house is refilled below this...
   HOUSE_TOP_UP: 20000,    // ...by this much
 };
 

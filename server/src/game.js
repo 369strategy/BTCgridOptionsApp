@@ -11,13 +11,14 @@ const feed = require('./priceFeed');
 const pricing = require('./pricing');
 const twap = require('./twap');
 const referral = require('./referral');
+const bots = require('./bots');
 
 const { GAME } = config;
 // 'bet' (wallet, payload), 'account' (wallet), 'houseEdge' (value),
 // 'crowd' (open bets changed), 'bigWin' (public win), 'trades' (count)
 const events = new EventEmitter();
 
-// Real-money bets ever placed on the platform (the page's "Trades" stat).
+// Real-money bets ever placed on the platform (the page's "Trades" stat; bots not counted).
 let totalBets = 0;
 
 // In-memory mirror of open bets, so every tick can be checked without a query.
@@ -107,7 +108,7 @@ function publicWin(b) {
   const payout = Number(b.payout);
   return {
     id: b.id, wallet: b.wallet, amount, mult: Number(b.multiplier), payout,
-    profit: round2(payout - amount), at: new Date(b.settledAt).getTime(),
+    profit: round2(payout - amount), at: new Date(b.settledAt).getTime(), bot: bots.isBot(b.wallet),
   };
 }
 
@@ -130,7 +131,7 @@ async function loadBigWins() {
 /** Re-read the trade count and big wins after bets were written directly (sim.js history). */
 async function reloadStats() {
   await loadBigWins();
-  totalBets = await Bet.count();
+  totalBets = await Bet.count({ where: { wallet: bots.walletFilter(false) } });
   events.emit('trades', totalBets);
 }
 
@@ -140,11 +141,11 @@ function recentBigWins() {
   return bigWins.filter(w => w.at >= since);
 }
 
-/** Worst-case net house payout if every open bet won. */
-async function openExposure(t) {
+/** Worst-case net house payout if every open bet won (real players, or the bots' pretend house). */
+async function openExposure(t, ofBots = false) {
   const [row] = await Bet.findAll({
     attributes: [[sequelize.fn('SUM', sequelize.literal('amount * (multiplier - 1)')), 'exp']],
-    where: { status: 'open' }, raw: true, transaction: t,
+    where: { status: 'open', wallet: bots.walletFilter(ofBots) }, raw: true, transaction: t,
   });
   return Number((row && row.exp) || 0);
 }
@@ -267,9 +268,10 @@ async function placeBets(wallet, requests) {
   if (candidates.length) {
     await sequelize.transaction(async (t) => {
       await ledger.lockBalances(t);
-      let playerBal = await ledger.balance('player', wallet, t);
-      const house = await ledger.balance('house', null, t);
-      let exposure = await openExposure(t);
+      const acct = bots.accounts(wallet); // a bot plays with pretend money against a pretend house
+      let playerBal = await ledger.balance(acct.player, wallet, t);
+      const house = await ledger.balance(acct.house, null, t);
+      let exposure = await openExposure(t, bots.isBot(wallet));
       const existing = new Set((await Bet.findAll({
         attributes: ['cellTs', 'priceLevel'],
         where: { wallet, cellTs: { [Op.in]: candidates.map(c => c.cellTs) } },
@@ -292,8 +294,8 @@ async function placeBets(wallet, requests) {
           multiplier: c.mult.toFixed(4), quotedProb: c.prob.toFixed(6), feedSource: feed.source,
         }, { transaction: t });
         await ledger.postEntries([
-          { account: 'player', walletAddress: wallet, amount: -c.amount },
-          { account: 'escrow', walletAddress: wallet, amount: c.amount },
+          { account: acct.player, walletAddress: wallet, amount: -c.amount },
+          { account: acct.escrow, walletAddress: wallet, amount: c.amount },
         ], 'bet', bet.id, `stake ${c.cell} @${c.mult}x`, t);
         playerBal -= c.amount;
         exposure += netWin;
@@ -304,10 +306,12 @@ async function placeBets(wallet, requests) {
 
   for (const b of accepted) open.set(b.id, toSnapshot(b));
   if (accepted.length) {
-    totalBets += accepted.length;
     events.emit('account', wallet);
     events.emit('crowd');
-    events.emit('trades', totalBets);
+    if (!bots.isBot(wallet)) {
+      totalBets += accepted.length;
+      events.emit('trades', totalBets);
+    }
   }
   const repriced = accepted.length ? await lastLook(accepted, received + GAME.BET_HOLD_MS) : [];
   return { accepted: accepted.map(publicBet), rejected, repriced };
@@ -375,18 +379,19 @@ async function settle(snap, outcome, evidence = {}) {
       }, { where: { id: snap.id, status: 'open' }, transaction: t });
       if (n !== 1) return null; // already settled
 
-      const legs = [{ account: 'escrow', walletAddress: snap.wallet, amount: -snap.amount }];
+      const acct = bots.accounts(snap.wallet);
+      const legs = [{ account: acct.escrow, walletAddress: snap.wallet, amount: -snap.amount }];
       if (outcome === 'won') {
-        legs.push({ account: 'house', amount: -(payout - snap.amount) });
-        legs.push({ account: 'player', walletAddress: snap.wallet, amount: payout });
+        legs.push({ account: acct.house, amount: -(payout - snap.amount) });
+        legs.push({ account: acct.player, walletAddress: snap.wallet, amount: payout });
       } else if (outcome === 'lost') {
-        legs.push({ account: 'house', amount: snap.amount });
+        legs.push({ account: acct.house, amount: snap.amount });
       } else {
-        legs.push({ account: 'player', walletAddress: snap.wallet, amount: snap.amount });
+        legs.push({ account: acct.player, walletAddress: snap.wallet, amount: snap.amount });
       }
       await ledger.postEntries(legs, `bet_${outcome}`, snap.id, null, t);
-      // 1% of the stake to the player's referrer (won or lost; never void)
-      if (outcome !== 'void') {
+      // 1% of the stake to the player's referrer (won or lost; never void; never for bots)
+      if (outcome !== 'void' && !bots.isBot(snap.wallet)) {
         await referral.creditCommission({ betId: snap.id, wallet: snap.wallet, stake: snap.amount, placedAt: snap.placedAt }, t);
       }
       return Bet.findByPk(snap.id, { transaction: t });
@@ -482,9 +487,9 @@ function onSource({ source }) {
 
 async function start() {
   await loadFlags();
+  await bots.load();
   await loadOpenBets();
-  await loadBigWins();
-  totalBets = await Bet.count();
+  await reloadStats();
   twap.on('eval', onEval);
   feed.on('source', onSource);
   setInterval(sweep, 250);

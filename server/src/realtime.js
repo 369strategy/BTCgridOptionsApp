@@ -8,7 +8,8 @@
 //   feed    when the source changes (futures -> spot)
 //   config  when an admin changes the house edge
 //   crowd   when open bets change: how many OTHER players have an open bet on
-//           each cell (counts only, never wallets; your own bet isn't counted)
+//           each cell, and how many bots (counts only, never wallets; your own
+//           bet isn't counted)
 //   bigWin  a won bet with profit >= $200 or >= +200% (hello carries the recent ones)
 //   trades  real-money bets ever placed on the platform (also in hello)
 //   account / bet   per signed-in wallet (after {type:'auth', token})
@@ -19,6 +20,7 @@ const pricing = require('./pricing');
 const twap = require('./twap');
 const game = require('./game');
 const auth = require('./auth');
+const bots = require('./bots');
 
 const { GAME } = config;
 
@@ -49,14 +51,22 @@ function gridMessage(sim) {
   };
 }
 
-// Open bets per cell as seen by `wallet` (its own bet left out).
+// Open bets per cell as seen by `wallet` (its own bet left out): players in
+// `cells`, bots in `bots`.
 function crowdMessage(byCell, wallet) {
   const cells = {};
+  const botCells = {};
   for (const [key, wallets] of byCell) {
-    const n = wallets.length - (wallet && wallets.includes(wallet) ? 1 : 0);
-    if (n > 0) cells[key] = n;
+    let people = 0;
+    let botCount = 0;
+    for (const w of wallets) {
+      if (w === wallet) continue;
+      if (bots.isBot(w)) botCount++; else people++;
+    }
+    if (people) cells[key] = people;
+    if (botCount) botCells[key] = botCount;
   }
-  return { type: 'crowd', cells };
+  return { type: 'crowd', cells, bots: botCells };
 }
 
 function sendCrowd(ws) {
