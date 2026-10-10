@@ -136,6 +136,7 @@ const SIM = {
   MIN_STAKE: 1,
   MAX_STAKE: 11,
   NEW_TRADER_MS: Number(process.env.SIM_NEW_TRADER_MS || 5 * 60 * 1000),
+  NEW_TRADERS_PAUSED: process.env.SIM_NEW_TRADERS_PAUSED === '1', // existing bots keep betting
   BANKROLL: 300,          // each bot's pretend balance, topped up again when it runs low
   HOUSE_FLOOR: 5000,      // the bots' pretend house is refilled below this...
   HOUSE_TOP_UP: 20000,    // ...by this much

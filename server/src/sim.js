@@ -142,8 +142,9 @@ async function start() {
     for (const pnl of SIM.START_PNL) await addTrader(pnl);
     await game.reloadStats();
   }
-  console.log(`[sim] ${bots.count()} bots, ~${SIM.BETS_PER_MIN} bets/min, +1 every ${SIM.NEW_TRADER_MS / 60000} min (pretend money)`);
+  console.log(`[sim] ${bots.count()} bots, ~${SIM.BETS_PER_MIN} bets/min, ${SIM.NEW_TRADERS_PAUSED ? 'new bots paused' : `+1 every ${SIM.NEW_TRADER_MS / 60000} min`} (pretend money)`);
   scheduleBet();
+  if (SIM.NEW_TRADERS_PAUSED) return;
   setInterval(() => {
     addTrader().then(w => console.log(`[sim] bot ${bots.count()} joined (${w})`))
       .catch(err => console.warn(`[sim] adding a bot failed: ${err.message}`));
